@@ -81,6 +81,7 @@ def detect():
                 raw_box_data = img_det.get_boxes(img_feed)
                 box_data = [tuple(map(int, box.xyxy[0])) for box in raw_box_data]
                 print(box_data) 
+
             time.sleep(DET_WAIT)
         except Exception as e:
             print("ERROR AT THREAD 0", e)
@@ -155,7 +156,7 @@ def read_telem():
 # SEND GCS , GET BUTTON PRESS , CHECK POSITION
 def main_loop():
 
-    global telemetry_data, gcs_data
+    global telemetry_data, gcs_data, box_data
 
     while True:
         # PROCESS PIXHAWK DATA
@@ -166,6 +167,9 @@ def main_loop():
                 if (msg.get_type() == "GLOBAL_POSITION_INT"):
                     print((msg.lat / 1e7, msg.lon / 1e7))
 
+        # SEND BOXES
+        for box in box_data:
+            mav_com.send_box(box)
 
         # PROCESS GCS DATA
         blst = gcs_data.get("NAMED_VALUE_INT")
@@ -177,6 +181,9 @@ def main_loop():
             elif (blst[-1].value == 3):
                 print("DEACTIVATE")
                 p.ChangeDutyCycle(0)
+
+            elif (blst[-1].value == 4):
+                print("DETECTION START")
 
             blst.pop()
 

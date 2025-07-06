@@ -67,3 +67,9 @@ class MavConnect:
 
     def get_gcs(self):
         return self.gcs_in.recv_match()
+
+    def send_box(self, box):
+        self.gcs_out.mav.statustext_send(
+            severity=6,
+            text=str(box).encode('utf-8')
+        )
