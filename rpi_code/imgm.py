@@ -1,36 +1,16 @@
 import os, time
-os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
+#os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
 import cv2
 cv2.imshow = lambda *args, **kwargs: None
 
 from ultralytics import YOLO
 
 
-
-class RecvClass:
+class DetectClass:
 
 	def __init__(self, model_path):
-
-		gst_pipeline = (
-    		"libcamerasrc ! "
-    		"video/x-raw,width=640,height=480,framerate=30/1 ! "
-    		"videoconvert ! appsink"
-		)
-
 		self.model = YOLO(model_path)
 		print("Model is ready...")
-
-		self.cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
-
-		if not self.cap.isOpened():
-			print("Failed to open camera stream...")
-			exit()
-
-		print("Camera stream is ready...")
-
-	def recv(self):
-		ret, frame = self.cap.read()
-		return frame if ret else None
 
 	def get_boxes(self, img):
 		return self.model.predict(img, show = False)[0].boxes
@@ -47,12 +27,35 @@ class RecvClass:
 		return img
 
 
+class RecvClass:
+
+	def __init__(self):
+
+		gst_pipeline = (
+    		"libcamerasrc ! "
+    		"video/x-raw,width=640,height=480,format=NV12,framerate=30/1 ! "
+    		"videoconvert ! appsink"
+		)
+
+		self.cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+
+		if not self.cap.isOpened():
+			print("Failed to open camera stream...")
+			exit()
+
+		print("Camera stream is ready...")
+
+	def recv(self):
+		ret, frame = self.cap.read()
+		return frame if ret else None
+
+
 	def close(self):
 		self.cap.release()
 
 	def restart(self):
 		self.cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
-		
+
 		if not self.cap.isOpened():
 			print("Failed to open camera stream...")
 			exit()
@@ -98,19 +101,3 @@ class SendClass:
 			exit()
 
 		print("Gstreamer is ready...")
-
-
-
-if __name__ == "__main__":
-	test1 = SendClass("127.0.0.1", 5000)
-	img = cv2.imread("test.png")
-	img = cv2.resize(img, (640, 480))
-
-	img2 = cv2.imread("test2.png")
-	img2 = cv2.resize(img2, (640, 480))
-
-	while True:
-		test1.send(img2)
-		time.sleep(0.1)
-		test1.send(img)
-		time.sleep(0.1)

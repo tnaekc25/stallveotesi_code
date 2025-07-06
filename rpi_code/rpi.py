@@ -2,7 +2,7 @@ from pymavlink import mavutil
 import time, select, socket, numpy as np, sys
 from threading import Thread
 from mav import MavConnect
-from imgm import RecvClass, SendClass
+from imgm import RecvClass, SendClass, DetectClass
 
 from sim.simulation import RocketSimulation
 from sim.rocket import RocketModel
@@ -13,8 +13,9 @@ GPIO.setmode(GPIO.BOARD)
 
 ERROR_WAIT = 0.1
 WAIT_TIME = 0.05
+DET_WAIT = 1
 
-IP = "10.250.41.165"
+IP = "192.168.0.102"
 MSIP = "192.168.53.79"
 PORTS = (14550, 14551, 31313)
 
@@ -41,11 +42,13 @@ pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
 print("SUCCESS")
 
 print(">>> Waiting for heartbeat from Pixhawk...")
-pixhawk.wait_heartbeat()
+#pixhawk.wait_heartbeat()
 print("SUCCESS")
 
 mav_com = MavConnect(pixhawk)
-img_pro = RecvClass("model.pt")
+
+img_det = DetectClass("model.pt")
+img_recv = RecvClass()
 img_send = SendClass(IP, 5000)
 
 
@@ -62,27 +65,48 @@ sim = RocketSimulation(dt = 0.1, rocket = rocket, envr = envr)
 
 telemetry_data = {}
 gcs_data = {}
+box_data = []
 img_feed = None
 
 
 
-## APPLY OBJECT DETECTION AND SEND IMG
-def detect_and_send():
+## APPLY OBJECT DETECTION AND 
+def detect():
+
+    global box_data
+
     while True:
         try:
-            img_feed = img_pro.recv()
-            if (img_feed):
-                boxes = img_pro.get_boxes(img_feed)    
-                new_img = img_pro.draw_boxes(img_feed, boxes)
-
-                img_send.send(new_img)
-        except:
+            if (img_feed) is not None:
+                raw_box_data = img_det.get_boxes(img_feed)
+                box_data = [tuple(map(int, box.xyxy[0])) for box in raw_box_data]
+                print(box_data) 
+            time.sleep(DET_WAIT)
+        except Exception as e:
             print("ERROR AT THREAD 0", e)
+            time.sleep(ERROR_WAIT)
+
+
+## SEND IMG
+def send_img():
+
+    global img_feed
+
+    while True:
+        try:
+            img_feed = img_recv.recv()
+            if (img_feed is not None):   
+                img_send.send(img_feed)
+
+            else:
+                print("feed is none")
+        except Exception as e:
+            print("ERROR AT THREAD 1", e)
             img_send.close()
-            img_pro.close()
+            img_recv.close()
             time.sleep(ERROR_WAIT)
             img_send.restart()
-            img_pro.restart()      
+            img_recv.restart()      
 
 
 ## READ TELEMETRY FROM PIXHAWK
@@ -119,7 +143,7 @@ def read_telem():
         
         except Exception as e:
 
-            print("ERROR AT THREAD 1", e)
+            print("ERROR AT THREAD 2", e)
             mav_com.close_sock()
             mav_com.close_gcs()
             time.sleep(ERROR_WAIT)
@@ -175,8 +199,9 @@ if __name__ == "__main__":
     if (len(sys.argv) > 1):
         mav_com.testing = True
 
-    Thread(target=detect_and_send, daemon=True).start()
-    Thread(target=read_telem, daemon=True).start()
+    Thread(target=send_img, daemon=True).start()
+    Thread(target=detect, daemon=True).start()
+    #Thread(target=read_telem, daemon=True).start()
     main_loop()
 
     p.stop()

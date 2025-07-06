@@ -3,12 +3,18 @@ import time
 import numpy as np
 
 # Your main code should listen on this
-DEST_IP = "127.0.0.1"
+DEST_IP = "192.168.0.108"
 DEST_PORT = 15555  # Change if needed
 
 # Create a MAVLink UDP output to your main script
 pixhawk_sim = mavutil.mavlink_connection(f'udpout:{DEST_IP}:{DEST_PORT}')
-
+pixhawk_sim.mav.heartbeat_send(
+        type        = mavutil.mavlink.MAV_TYPE_QUADROTOR,   # vehicle class
+        autopilot   = mavutil.mavlink.MAV_AUTOPILOT_PX4,    # PX4 firmware; use MAV_AUTOPILOT_ARDUPILOTMEGA for ArduPilot
+        base_mode   = mavutil.mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED,
+        custom_mode = 0,                                    # PX4’s flight‑mode index if you want something specific
+        system_status = mavutil.mavlink.MAV_STATE_STANDBY    # or MAV_STATE_ACTIVE if “flying”
+    )
 print(">>> Pixhawk Simulator started. Sending fake telemetry...")
 
 i = 0
