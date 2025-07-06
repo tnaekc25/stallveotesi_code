@@ -28,6 +28,8 @@ class MavCom:
         self.battery_volt = 0
         self.battery_per = 0
 
+        self.boxes = []
+
 
     def connect(self, ip, port1, port2):
 
@@ -91,12 +93,26 @@ class MavCom:
             self.cont_inputs = (msg.chan3_raw, msg.chan1_raw, msg.chan2_raw, msg.chan4_raw)
             return 1
 
+        elif msg_type == "STATUSTEXT":
+            recvd = (msg.text.rstrip('\x00'))
+            self.boxes.append(tuple(map(int, recvd[1:-1].split(','))))
+
+            return 1
+
+
     def send_button(self, i):
         self.mav_out.mav.named_value_int_send(
             int(i*10),
             b"button_data",
             i
         )
+
+    def draw_rect(self, img):
+        if (self.boxes):
+            box = self.boxes[-1]
+            self.boxes.pop()
+            x1, y1, x2, y2 = box
+            cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
 
 
 class ImageCom:

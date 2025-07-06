@@ -102,8 +102,9 @@ class BottomWidget(ImageWidget):
         self.bt11.clicked.connect(lambda : com.send_button(0))
         self.children.append(self.bt11)
 
-        self.bt12 = StyledButton(self, "COM", self)
+        self.bt12 = StyledButton(self, "DET", self)
         self.bt12.setFactors(0.0347, 0.0601, 0.400, 0.152)
+        self.bt12.clicked.connect(lambda : com.send_button(4))
         self.children.append(self.bt12)
 
         self.bt13 = StyledButton(self, "RET", self)
@@ -254,11 +255,12 @@ def update_com():
     while True:
         try:
             com.recv_message()
-        except:
-            print("ERROR AT RECV")
+        except Exception as e:
+            print("ERROR AT RECV", e)
             if (com.mav_in and com.mav_out):
                 com.close()
             time.sleep(1)
+
 
 def update_img():
 
@@ -270,6 +272,8 @@ def update_img():
         try:
             while True:
                 upimg = imgcom.get_img()
+                com.draw_rect(upimg)
+
         except:
             print("ERROR AT GSTREAMER")
             imgcom.close()

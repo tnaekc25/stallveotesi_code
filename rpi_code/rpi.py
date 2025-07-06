@@ -13,7 +13,7 @@ GPIO.setmode(GPIO.BOARD)
 
 ERROR_WAIT = 0.1
 WAIT_TIME = 0.05
-DET_WAIT = 1
+DET_WAIT = 0.5
 
 IP = "192.168.0.102"
 MSIP = "192.168.53.79"
@@ -24,6 +24,9 @@ GPIO.setup(SERVO_PIN, GPIO.OUT)
 
 p = GPIO.PWM(SERVO_PIN, 50)
 p.start(0)
+
+is_det = False
+
 
 def connect_mav():
     print(">>> Connecting to GCS Mavlink...")
@@ -77,7 +80,7 @@ def detect():
 
     while True:
         try:
-            if (img_feed) is not None:
+            if (is_det and (img_feed) is not None):
                 raw_box_data = img_det.get_boxes(img_feed)
                 box_data = [tuple(map(int, box.xyxy[0])) for box in raw_box_data]
                 print(box_data) 
@@ -156,7 +159,7 @@ def read_telem():
 # SEND GCS , GET BUTTON PRESS , CHECK POSITION
 def main_loop():
 
-    global telemetry_data, gcs_data, box_data
+    global telemetry_data, gcs_data, box_data, is_det
 
     while True:
         # PROCESS PIXHAWK DATA
@@ -170,6 +173,7 @@ def main_loop():
         # SEND BOXES
         for box in box_data:
             mav_com.send_box(box)
+        box_data = []
 
         # PROCESS GCS DATA
         blst = gcs_data.get("NAMED_VALUE_INT")
@@ -183,7 +187,8 @@ def main_loop():
                 p.ChangeDutyCycle(0)
 
             elif (blst[-1].value == 4):
-                print("DETECTION START")
+                is_det = False if is_det else True
+                print("DETECTION TOGGLE: ", is_det)
 
             blst.pop()
 
@@ -208,7 +213,7 @@ if __name__ == "__main__":
 
     Thread(target=send_img, daemon=True).start()
     Thread(target=detect, daemon=True).start()
-    #Thread(target=read_telem, daemon=True).start()
+    Thread(target=read_telem, daemon=True).start()
     main_loop()
 
     p.stop()

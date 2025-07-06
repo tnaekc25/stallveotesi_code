@@ -15,17 +15,6 @@ class DetectClass:
 	def get_boxes(self, img):
 		return self.model.predict(img, show = False)[0].boxes
 
-	def draw_boxes(self, ref, boxes):
-
-		img = ref.copy()
-
-		for box in boxes:
-			x1, y1, x2, y2 = map(int, box.xyxy[0])
-			cls = int(box.cls[0])
-			cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255 if cls else 0, 0 if cls else 255), 2)
-
-		return img
-
 
 class RecvClass:
 
