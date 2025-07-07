@@ -1,8 +1,8 @@
 from pymavlink import mavutil
 import time, select, socket, numpy as np, sys
 from threading import Thread
-from mav import MavConnect
-from imgm import RecvClass, SendClass, DetectClass
+from com.mav import MavConnect
+from com.imgm import RecvClass, SendClass, DetectClass
 
 from sim.simulation import RocketSimulation
 from sim.rocket import RocketModel
