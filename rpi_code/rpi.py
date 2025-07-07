@@ -13,7 +13,7 @@ GPIO.setmode(GPIO.BOARD)
 
 ERROR_WAIT = 0.1
 WAIT_TIME = 0.05
-DET_WAIT = 0.5
+DET_WAIT = 0.1
 
 IP = "192.168.0.102"
 MSIP = "192.168.53.79"
@@ -73,10 +73,10 @@ img_feed = None
 
 
 
-## APPLY OBJECT DETECTION AND 
+## APPLY OBJECT DETECTION AND RUN SIMULATION
 def detect():
 
-    global box_data
+    global box_data, telemetry_data
 
     while True:
         try:
@@ -84,10 +84,21 @@ def detect():
                 raw_box_data = img_det.get_boxes(img_feed)
                 box_data = [tuple(map(int, box.xyxy[0])) for box in raw_box_data] 
 
-                print(img_det.get_distance((box[0] + box[2]) / 2,
-                    (box[1] + box[3]) / 2, 0.5, 0))
+                for box in box_data:
+                    print(img_det.get_distance((box[0] + box[2]) / 2,
+                        (box[1] + box[3]) / 2, 0.5, 0))
+
+                    # RUN SIMULATION
+                    ned = telemetry_data.get("LOCAL_POSITION_NED")
+                    hud = telemetry_data.get("VFR_HUD")
+        
+                    if (ned and hud):
+                        c = sim.simulate(np.array((0, 0, hud.alt, ned.vx, ned.vy, ned.vz)))
+                        x, y, z = c[0:3]
+                        print(x, y, z)
 
             time.sleep(DET_WAIT)
+        
         except Exception as e:
             print("ERROR AT THREAD 0", e)
             time.sleep(ERROR_WAIT)
@@ -192,15 +203,6 @@ def main_loop():
                 print("DETECTION TOGGLE: ", is_det)
 
             blst.pop()
-
-
-        # RUN SIMULATION
-        ned = telemetry_data.get("LOCAL_POSITION_NED")
-        hud = telemetry_data.get("VFR_HUD")
-        if (ned and hud):
-            c = sim.simulate(np.array((0, 0, hud.alt, ned.vx, ned.vy, ned.vz)))
-            x, y, z = c[0:3]
-            print(x, y, z)
 
         time.sleep(WAIT_TIME)
 
