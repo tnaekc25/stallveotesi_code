@@ -8,23 +8,24 @@ from ultralytics import YOLO
 
 class DetectClass:
 
-	def __init__(self, model_path):
+	def __init__(self, model_path, fx, fy, cx, cy):
 		self.model = YOLO(model_path)
+		self.fx, self.fy, self.cx, self.cy = fx, fy, cx, cy
 		print("Model is ready...")
 
 	def get_boxes(self, img):
 		return self.model.predict(img, show = False)[0].boxes
 
-	def get_distance(self, x, y, h, fx, fy, cx, cy, camera_tilt_deg):
+	def get_distance(self, x, y, h, camera_tilt_deg):
     	theta_rad = np.radians(camera_tilt_deg)
-    	alpha_vertical_rad = np.arctan((y - cy) / fy)
+    	alpha_vertical_rad = np.arctan((y - self.cy) / self.fy)
     	total_angle_of_depression_rad = theta_rad + alpha_vertical_rad
 	
     	if total_angle_of_depression_rad <= 0:
     	    return np.inf
 
     	distance = h / np.tan(total_angle_of_depression_rad)
-    	angle_rad = np.arctan((x - cx) / fx)
+    	angle_rad = np.arctan((x - self.cx) / self.fx)
     	hor_angle = np.degrees(angle_rad)
 	
     	return distance, hor_angle
