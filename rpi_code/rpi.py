@@ -25,7 +25,7 @@ GPIO.setup(SERVO_PIN, GPIO.OUT)
 p = GPIO.PWM(SERVO_PIN, 50)
 p.start(0)
 
-is_det = False
+is_det = True
 
 
 def connect_mav():
@@ -50,7 +50,7 @@ print("SUCCESS")
 
 mav_com = MavConnect(pixhawk)
 
-img_det = DetectClass("model.pt")
+img_det = DetectClass("model.pt", 529, 529, 320, 240)
 img_recv = RecvClass()
 img_send = SendClass(IP, 5000)
 
@@ -82,8 +82,10 @@ def detect():
         try:
             if (is_det and (img_feed) is not None):
                 raw_box_data = img_det.get_boxes(img_feed)
-                box_data = [tuple(map(int, box.xyxy[0])) for box in raw_box_data]
-                print(box_data) 
+                box_data = [tuple(map(int, box.xyxy[0])) for box in raw_box_data] 
+
+                print(img_det.get_distance((box[0] + box[2]) / 2,
+                    (box[1] + box[3]) / 2, 0.5, 0))
 
             time.sleep(DET_WAIT)
         except Exception as e:
@@ -173,7 +175,6 @@ def main_loop():
         # SEND BOXES
         for box in box_data:
             mav_com.send_box(box)
-        box_data = []
 
         # PROCESS GCS DATA
         blst = gcs_data.get("NAMED_VALUE_INT")
@@ -213,7 +214,7 @@ if __name__ == "__main__":
 
     Thread(target=send_img, daemon=True).start()
     Thread(target=detect, daemon=True).start()
-    Thread(target=read_telem, daemon=True).start()
+    #Thread(target=read_telem, daemon=True).start()
     main_loop()
 
     p.stop()

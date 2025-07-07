@@ -1,6 +1,6 @@
 import os, time
 #os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
-import cv2
+import cv2, numpy as np
 cv2.imshow = lambda *args, **kwargs: None
 
 from ultralytics import YOLO
@@ -17,18 +17,22 @@ class DetectClass:
 		return self.model.predict(img, show = False)[0].boxes
 
 	def get_distance(self, x, y, h, camera_tilt_deg):
-    	theta_rad = np.radians(camera_tilt_deg)
-    	alpha_vertical_rad = np.arctan((y - self.cy) / self.fy)
-    	total_angle_of_depression_rad = theta_rad + alpha_vertical_rad
-	
-    	if total_angle_of_depression_rad <= 0:
-    	    return np.inf
 
-    	distance = h / np.tan(total_angle_of_depression_rad)
-    	angle_rad = np.arctan((x - self.cx) / self.fx)
-    	hor_angle = np.degrees(angle_rad)
-	
-    	return distance, hor_angle
+		print(x, y)
+
+		theta_rad = np.radians(camera_tilt_deg)
+		alpha_vertical_rad = np.arctan2(y - self.cy, self.fy)
+		total_angle_rad = theta_rad + alpha_vertical_rad
+
+		if total_angle_rad <= 0:
+			return np.inf, 0.0
+
+		distance = h / np.tan(total_angle_rad)
+		angle_rad = np.arctan2(x - self.cx, self.fx)
+		hor_angle = np.degrees(angle_rad)
+
+		return distance, hor_angle
+
 
 
 
