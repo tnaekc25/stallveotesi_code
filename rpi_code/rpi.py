@@ -83,7 +83,7 @@ def detect_and_fire():
         try:
             if (is_det and (img_feed) is not None):
                 raw_box_data = img_det.get_boxes(img_feed)
-                box_data = [int(box.cls[0].item()), tuple(map(int, box.xyxy[0])) for box in raw_box_data] 
+                box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
 
                 for box in box_data:
 
