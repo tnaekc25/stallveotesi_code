@@ -105,7 +105,7 @@ def detect_and_fire():
                         if (abs(detx-x) < 2 and abs(dety-y) < 2 and firing == False):
                             firing = True
                             print("FIRE CONDITION")
-                            p.ChangeDutyCycle(25)
+                            p.ChangeDutyCycle(14)
                             firing = False
 
             time.sleep(DET_WAIT)
@@ -204,7 +204,7 @@ def main_loop():
             if (blst[-1].value == 0 and firing == False):
                 firing = True
                 print("ACTIVATE")
-                p.ChangeDutyCycle(25) 
+                p.ChangeDutyCycle(14) 
                 firing = False
 
             elif (blst[-1].value == 3 and firing == False):
