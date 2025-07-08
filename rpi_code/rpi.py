@@ -45,7 +45,7 @@ pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
 print("SUCCESS")
 
 print(">>> Waiting for heartbeat from Pixhawk...")
-#pixhawk.wait_heartbeat()
+pixhawk.wait_heartbeat()
 print("SUCCESS")
 
 mav_com = MavConnect(pixhawk)
@@ -231,7 +231,7 @@ if __name__ == "__main__":
 
     Thread(target=send_img, daemon=True).start()
     Thread(target=detect_and_fire, daemon=True).start()
-    #Thread(target=read_telem, daemon=True).start()
+    Thread(target=read_telem, daemon=True).start()
     main_loop()
 
     p.stop()
