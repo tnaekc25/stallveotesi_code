@@ -50,7 +50,7 @@ print("SUCCESS")
 
 mav_com = MavConnect(pixhawk)
 
-img_det = DetectClass("model.pt", 529, 529, 320, 240)
+img_det = DetectClass("model.pt", 530, 529, 320, 240)
 img_recv = RecvClass()
 img_send = SendClass(IP, 5000)
 
@@ -70,13 +70,14 @@ telemetry_data = {}
 gcs_data = {}
 box_data = []
 img_feed = None
+firing = False
 
 
 
 ## APPLY OBJECT DETECTION AND RUN SIMULATION
-def detect():
+def detect_and_fire():
 
-    global box_data, telemetry_data
+    global box_data, telemetry_data, firing
 
     while True:
         try:
@@ -85,8 +86,12 @@ def detect():
                 box_data = [tuple(map(int, box.xyxy[0])) for box in raw_box_data] 
 
                 for box in box_data:
-                    print(img_det.get_distance((box[0] + box[2]) / 2,
-                        (box[1] + box[3]) / 2, 0.5, 0))
+
+                    # CALCULATE REAL LIFE DISTANCE
+                    detx, dety = img_det.get_distance((box[0] + box[2]) / 2,
+                        (box[1] + box[3]) / 2, 0.5, 0)
+
+                    print(detx, dety)
 
                     # RUN SIMULATION
                     ned = telemetry_data.get("LOCAL_POSITION_NED")
@@ -96,6 +101,12 @@ def detect():
                         c = sim.simulate(np.array((0, 0, hud.alt, ned.vx, ned.vy, ned.vz)))
                         x, y, z = c[0:3]
                         print(x, y, z)
+
+                        if (abs(detx-x) < 2 and abs(dety-y) < 2 and firing == False):
+                            firing = True
+                            print("FIRE CONDITION")
+                            p.ChangeDutyCycle(25)
+                            firing = False
 
             time.sleep(DET_WAIT)
         
@@ -172,7 +183,7 @@ def read_telem():
 # SEND GCS , GET BUTTON PRESS , CHECK POSITION
 def main_loop():
 
-    global telemetry_data, gcs_data, box_data, is_det
+    global telemetry_data, gcs_data, box_data, is_det, firing
 
     while True:
         # PROCESS PIXHAWK DATA
@@ -190,13 +201,17 @@ def main_loop():
         # PROCESS GCS DATA
         blst = gcs_data.get("NAMED_VALUE_INT")
         if (blst):
-            if (blst[-1].value == 0):
+            if (blst[-1].value == 0 and firing == False):
+                firing = True
                 print("ACTIVATE")
                 p.ChangeDutyCycle(25) 
+                firing = False
 
-            elif (blst[-1].value == 3):
+            elif (blst[-1].value == 3 and firing == False):
+                firing = True
                 print("DEACTIVATE")
                 p.ChangeDutyCycle(0)
+                firing = False
 
             elif (blst[-1].value == 4):
                 is_det = False if is_det else True
@@ -215,7 +230,7 @@ if __name__ == "__main__":
         mav_com.testing = True
 
     Thread(target=send_img, daemon=True).start()
-    Thread(target=detect, daemon=True).start()
+    Thread(target=detect_and_fire, daemon=True).start()
     #Thread(target=read_telem, daemon=True).start()
     main_loop()
 

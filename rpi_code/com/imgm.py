@@ -17,21 +17,18 @@ class DetectClass:
 		return self.model.predict(img, show = False)[0].boxes
 
 	def get_distance(self, x, y, h, camera_tilt_deg):
-
-		print(x, y)
-
-		theta_rad = np.radians(camera_tilt_deg)
-		alpha_vertical_rad = np.arctan2(y - self.cy, self.fy)
-		total_angle_rad = theta_rad + alpha_vertical_rad
-
-		if total_angle_rad <= 0:
-			return np.inf, 0.0
-
-		distance = h / np.tan(total_angle_rad)
-		angle_rad = np.arctan2(x - self.cx, self.fx)
-		hor_angle = np.degrees(angle_rad)
-
-		return distance, hor_angle
+	    theta_rad = np.radians(camera_tilt_deg)
+	    alpha_vertical_rad = np.arctan2(y - self.cy, self.fy)
+	    total_angle_rad = theta_rad + alpha_vertical_rad
+	
+	    if abs(np.cos(total_angle_rad)) < 1e-3:
+	        return np.inf, np.inf
+	
+	    dy = h / np.tan(total_angle_rad)
+	    angle_rad = np.arctan2(x - self.cx, self.fx)
+	    dx = dy * np.tan(angle_rad)
+	
+	    return dx, dy
 
 
 
