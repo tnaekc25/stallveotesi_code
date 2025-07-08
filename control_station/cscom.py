@@ -111,8 +111,8 @@ class MavCom:
         if (self.boxes):
             box = self.boxes[-1]
             self.boxes.pop()
-            x1, y1, x2, y2 = box
-            cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            cls, x1, y1, x2, y2 = box
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255 if cls else 0, 0 if cls else 255), 2)
 
 
 class ImageCom:

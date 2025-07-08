@@ -17,7 +17,7 @@ os.environ['QT_SCALE_FACTOR'] = '1'
 os.environ['QT_FONT_DPI'] = '0'
 
 upimg = None
-IP = "192.168.0.108" 
+IP = " 10.250.41.118" 
 PORT1 = 14550 
 PORT2 = 14551
 

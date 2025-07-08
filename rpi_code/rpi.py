@@ -15,7 +15,7 @@ ERROR_WAIT = 0.1
 WAIT_TIME = 0.05
 DET_WAIT = 0.1
 
-IP = "192.168.0.102"
+IP = "10.250.41.165"
 MSIP = "192.168.53.79"
 PORTS = (14550, 14551, 31313)
 
@@ -45,7 +45,7 @@ pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
 print("SUCCESS")
 
 print(">>> Waiting for heartbeat from Pixhawk...")
-pixhawk.wait_heartbeat()
+#pixhawk.wait_heartbeat()
 print("SUCCESS")
 
 mav_com = MavConnect(pixhawk)
@@ -83,7 +83,7 @@ def detect_and_fire():
         try:
             if (is_det and (img_feed) is not None):
                 raw_box_data = img_det.get_boxes(img_feed)
-                box_data = [tuple(map(int, box.xyxy[0])) for box in raw_box_data] 
+                box_data = [int(box.cls[0].item()), tuple(map(int, box.xyxy[0])) for box in raw_box_data] 
 
                 for box in box_data:
 
@@ -231,7 +231,7 @@ if __name__ == "__main__":
 
     Thread(target=send_img, daemon=True).start()
     Thread(target=detect_and_fire, daemon=True).start()
-    Thread(target=read_telem, daemon=True).start()
+    #Thread(target=read_telem, daemon=True).start()
     main_loop()
 
     p.stop()
