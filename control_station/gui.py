@@ -33,8 +33,8 @@ class BottomWidget(ImageWidget):
         self.children.append(self.image1)
 
         self.image2 = ImageWidget("test.png", self, self)
-        self.image2.setFactors(0.15, 0.261, 0.7944, 0.3461)
-        #self.image2.setFactors(0.3, 0.524, 0.7944, 0.3461)
+        #self.image2.setFactors(0.15, 0.261, 0.7944, 0.3461)
+        self.image2.setFactors(0.3, 0.524, 0.7944, 0.3461)
         self.children.append(self.image2)
 
         # |||||||||||||||||||||| Sliding Numbers ||||||||||||||||||||||

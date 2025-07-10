@@ -25,7 +25,7 @@ GPIO.setup(SERVO_PIN, GPIO.OUT)
 p = GPIO.PWM(SERVO_PIN, 50)
 p.start(0)
 
-is_det = True
+is_det = False
 
 
 def connect_mav():
@@ -102,11 +102,13 @@ def detect_and_fire():
                         x, y, z = c[0:3]
                         print(x, y, z)
 
+                        """
                         if (abs(detx-x) < 2 and abs(dety-y) < 2 and firing == False):
                             firing = True
                             print("FIRE CONDITION")
                             p.ChangeDutyCycle(14)
                             firing = False
+                        """
 
             time.sleep(DET_WAIT)
         

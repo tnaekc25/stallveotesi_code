@@ -4,6 +4,7 @@ import cv2, numpy as np
 cv2.imshow = lambda *args, **kwargs: None
 
 from ultralytics import YOLO
+from scipy.spatial.transform import Rotation
 
 
 class DetectClass:
@@ -16,19 +17,23 @@ class DetectClass:
 	def get_boxes(self, img):
 		return self.model.predict(img, show = False)[0].boxes
 
-	def get_distance(self, x, y, h, camera_tilt_deg):
-	    theta_rad = np.radians(camera_tilt_deg)
-	    alpha_vertical_rad = np.arctan2(y - self.cy, self.fy)
-	    total_angle_rad = theta_rad + alpha_vertical_rad
+	def get_distance(self, x, y, roll, pitch):
+		
+		X = (x - self.cx) / self.fx
+		Y = (y - self.cy) / self.fy
+		
+		r_cam = np.array([X, Y, 1.0])
+		r_cam /= np.linalg.norm(r_cam)
+		
+		r = Rotation.from_euler('xyz', [roll, pitch, 0], degrees=True)
+		r_world = r.inv().apply(r_cam)
+
+		t = h / r_world[2]
+
+		ground_point = t * r_world
+		dx, dy = ground_point[0], ground_point[1]
 	
-	    if abs(np.cos(total_angle_rad)) < 1e-3:
-	        return np.inf, np.inf
-	
-	    dy = h / np.tan(total_angle_rad)
-	    angle_rad = np.arctan2(x - self.cx, self.fx)
-	    dx = dy * np.tan(angle_rad)
-	
-	    return dx, dy
+		return dx, dy
 
 
 
