@@ -89,7 +89,7 @@ def detect_and_fire():
 
                     # CALCULATE REAL LIFE DISTANCE
                     detx, dety = img_det.get_distance((box[0] + box[2]) / 2,
-                        (box[1] + box[3]) / 2, 0.5, 0)
+                        (box[1] + box[3]) / 2, 0, 0, 0.5)
 
                     print(detx, dety)
 

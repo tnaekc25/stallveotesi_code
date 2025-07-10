@@ -17,14 +17,12 @@ class DetectClass:
 	def get_boxes(self, img):
 		return self.model.predict(img, show = False)[0].boxes
 
-	def get_distance(self, x, y, roll, pitch):
+	def get_distance(self, x, y, roll, pitch, h):
 		
 		X = (x - self.cx) / self.fx
 		Y = (y - self.cy) / self.fy
 		
 		r_cam = np.array([X, Y, 1.0])
-		r_cam /= np.linalg.norm(r_cam)
-		
 		r = Rotation.from_euler('xyz', [roll, pitch, 0], degrees=True)
 		r_world = r.inv().apply(r_cam)
 
