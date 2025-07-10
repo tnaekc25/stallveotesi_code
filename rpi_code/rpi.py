@@ -19,11 +19,15 @@ IP = "10.250.41.165"
 MSIP = "192.168.53.79"
 PORTS = (14550, 14551, 31313)
 
+MIN_PWM = 2.478
+NET_PWM = 7.11
+MAX_PWM = 12.874
+
 SERVO_PIN = 12
 GPIO.setup(SERVO_PIN, GPIO.OUT)
 
 p = GPIO.PWM(SERVO_PIN, 50)
-p.start(0)
+p.start(NET_PWM)
 
 is_det = False
 
@@ -106,7 +110,7 @@ def detect_and_fire():
                         if (abs(detx-x) < 2 and abs(dety-y) < 2 and firing == False):
                             firing = True
                             print("FIRE CONDITION")
-                            p.ChangeDutyCycle(14)
+                            p.ChangeDutyCycle(MAX_PWM if cls else MIN_PWM)
                             firing = False
                         """
 
@@ -205,17 +209,23 @@ def main_loop():
         if (blst):
             if (blst[-1].value == 0 and firing == False):
                 firing = True
-                print("ACTIVATE")
-                p.ChangeDutyCycle(14) 
+                print("ACTIVATE 1")
+                p.ChangeDutyCycle(MIN_PWM) 
                 firing = False
 
             elif (blst[-1].value == 3 and firing == False):
                 firing = True
-                print("DEACTIVATE")
-                p.ChangeDutyCycle(0)
+                print("ACTIVATE 2")
+                p.ChangeDutyCycle(MAX_PWM)
                 firing = False
 
-            elif (blst[-1].value == 4):
+            elif (blst[-1].value == 5 and firing == False):
+                firing = True
+                print("DE-ACTIVATE")
+                p.ChangeDutyCycle(NET_PWM)
+                firing = False
+
+            elif (blst[-1].value == 2):
                 is_det = False if is_det else True
                 print("DETECTION TOGGLE: ", is_det)
 

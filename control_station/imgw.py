@@ -447,6 +447,73 @@ class StyledButton(QPushButton):
 
 
 
+class StyledButton2(QPushButton):
+    def __init__(self, parent_widget, text, parent = None):
+        super().__init__(text, parent)
+
+        self.parent_widget = parent_widget
+
+        self.setStyleSheet("""
+    QPushButton {
+        background-color: qlineargradient(
+            x1:0, y1:0, x2:0, y2:1,
+            stop:0 #1c1c1c, stop:1 #0a0a0a);
+        color: #ffaa00;
+        border: 1px solid #ffaa00;
+        border-radius: 2px;
+        padding: 6px 12px;
+    }
+
+    QPushButton:hover {
+        border: 1px solid #ffcc00;
+        background-color: #2a2a2a;
+    }
+
+    QPushButton:pressed {
+        background-color: #000000;
+        border: 1px inset #ffaa00;
+        color: #ffaa00;
+    }
+
+    QPushButton:disabled {
+        background-color: #444;
+        border: 1px solid #555;
+        color: #777;
+    }
+    """)
+
+        
+
+    def setFactors(self, wf, hf, offx, offy):
+        self._wf = wf 
+        self._hf = hf
+        self._offx = offx
+        self._offy = offy
+
+        self.updateGeometry()
+
+    def resizeEvent(self, event):
+        self.updateGeometry()
+        return super().resizeEvent(event)
+
+    def updateGeometry(self):
+    
+        ph = self.parent_widget.height()
+        pw = self.parent_widget.width()
+
+        tw = (max(pw, (ph*RATIO))*self._wf)
+        th = (max(ph, (pw/RATIO))*self._hf)
+
+        posx = round(pw*self._offx-tw / 2)
+        posy = round(ph*self._offy-th / 2)
+
+        factor = ph/1664
+        self.setFont(QFont("Arial", round(8*factor), QFont.Weight.Black))
+
+        self.setGeometry(posx, posy, round(tw), round(th))
+
+
+
 class TelemBox(QWidget):
     def __init__(self, parent_widget, text, parent = None):
         super().__init__(parent)

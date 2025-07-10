@@ -1,5 +1,5 @@
 
-from imgw import ImageWidget, FullDigits, Needle, Attitude, BarWidget, StyledButton, TelemBox, MapWidget
+from imgw import ImageWidget, FullDigits, Needle, Attitude, BarWidget, StyledButton, StyledButton2, TelemBox, MapWidget
 
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel
 from PyQt6.QtGui import QPixmap, QPainter
@@ -33,8 +33,8 @@ class BottomWidget(ImageWidget):
         self.children.append(self.image1)
 
         self.image2 = ImageWidget("test.png", self, self)
-        #self.image2.setFactors(0.15, 0.261, 0.7944, 0.3461)
-        self.image2.setFactors(0.3, 0.524, 0.7944, 0.3461)
+        self.image2.setFactors(0.15, 0.261, 0.7944, 0.3461)
+        #self.image2.setFactors(0.2, 0.358, 0.7944, 0.3461)
         self.children.append(self.image2)
 
         # |||||||||||||||||||||| Sliding Numbers ||||||||||||||||||||||
@@ -97,38 +97,41 @@ class BottomWidget(ImageWidget):
         #self.bar4.setSlide(0.2)
 
         # |||||||||||||||||||||| Left Buttons ||||||||||||||||||||||
-        self.bt11 = StyledButton(self, "FIRE", self)
+        self.bt11 = StyledButton(self, "FIRE1", self)
         self.bt11.setFactors(0.0347, 0.0601, 0.400, 0.075)
         self.bt11.clicked.connect(lambda : com.send_button(0))
         self.children.append(self.bt11)
 
-        self.bt12 = StyledButton(self, "DET", self)
+        self.bt12 = StyledButton(self, "MAN", self)
         self.bt12.setFactors(0.0347, 0.0601, 0.400, 0.152)
-        self.bt12.clicked.connect(lambda : com.send_button(4))
+        self.bt12.clicked.connect(lambda : com.send_button(1))
         self.children.append(self.bt12)
 
-        self.bt13 = StyledButton(self, "RET", self)
+        self.bt13 = StyledButton(self, "DET", self)
         self.bt13.setFactors(0.0347, 0.0601, 0.400, 0.229)
-        self.bt13.clicked.connect(lambda : com.send_button(1))
+        self.bt13.clicked.connect(lambda : com.send_button(2))
         self.children.append(self.bt13)
 
         # |||||||||||||||||||||| Right Buttons ||||||||||||||||||||||
-        self.bt21 = StyledButton(self, "AUTO", self)
+        self.bt21 = StyledButton(self, "FIRE2", self)
         self.bt21.setFactors(0.0347, 0.0601, 0.6111, 0.075)
-        self.bt21.clicked.connect(lambda : com.send_button(2))
+        self.bt21.clicked.connect(lambda : com.send_button(3))
         self.children.append(self.bt21)
 
-        self.bt22 = StyledButton(self, "TEST", self)
+        self.bt22 = StyledButton(self, "AUTO", self)
         self.bt22.setFactors(0.0347, 0.0601, 0.6111, 0.152)
-        self.bt22.clicked.connect(lambda : com.send_button(3))
+        self.bt22.clicked.connect(lambda : com.send_button(4))
         self.children.append(self.bt22)
 
-        self.bt23 = StyledButton(self, "REC", self)
+        self.bt23 = StyledButton(self, "NET", self)
         self.bt23.setFactors(0.0347, 0.0601, 0.6111, 0.229)
-        self.bt23.clicked.connect(lambda : com.connect(IP, PORT1, PORT2))
+        self.bt23.clicked.connect(lambda : com.send_button(5))
         self.children.append(self.bt23)
 
-        self.is_updating = False
+        self.bt24 = StyledButton2(self, "REC", self)
+        self.bt24.setFactors(0.026, 0.045, 0.3, 0.075)
+        self.bt24.clicked.connect(lambda : com.connect(IP, PORT1, PORT2))
+        self.children.append(self.bt24)
 
         # |||||||||||||||||||||| Telemetry ||||||||||||||||||||||
 
@@ -153,6 +156,7 @@ class BottomWidget(ImageWidget):
         self.telem.setFactors(8, 0.1156, 0.1845, 0.5055, 0.152)
         self.children.append(self.telem)
 
+        self.is_updating = False
         self.startUpdater()
 
 
