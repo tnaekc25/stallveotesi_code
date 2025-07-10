@@ -23,6 +23,8 @@ MIN_PWM = 2.478
 NET_PWM = 7.11
 MAX_PWM = 12.874
 
+MDELAY = 1
+
 SERVO_PIN = 12
 GPIO.setup(SERVO_PIN, GPIO.OUT)
 
@@ -91,20 +93,24 @@ def detect_and_fire():
 
                 for box in box_data:
 
-                    # CALCULATE REAL LIFE DISTANCE
-                    detx, dety = img_det.get_distance((box[0] + box[2]) / 2,
-                        (box[1] + box[3]) / 2, 0, 0, 0.5)
-
-                    print(detx, dety)
-
                     # RUN SIMULATION
                     ned = telemetry_data.get("LOCAL_POSITION_NED")
                     hud = telemetry_data.get("VFR_HUD")
         
                     if (ned and hud):
-                        c = sim.simulate(np.array((0, 0, hud.alt, ned.vx, ned.vy, ned.vz)))
+
+                        # CALCULATE REAL LIFE DISTANCE
+                        detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
+                        (box[2] + box[4]) / 2, 0, 0, hud.alt)
+
+                        print(detx, dety)
+
+                        c = sim.simulate(np.array((0, 0, hud.alt, ned.vx, ned.vy, ned.vz)), MDELAY)
                         x, y, z = c[0:3]
+                        
                         print(x, y, z)
+
+                        cls = box[0]
 
                         """
                         if (abs(detx-x) < 2 and abs(dety-y) < 2 and firing == False):

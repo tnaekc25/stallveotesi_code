@@ -9,9 +9,14 @@ class RocketSimulation:
 		self.envr = envr
 
 
-	def simulate(self, z0):
+	def simulate(self, z0, delay):
 		last = z0
 		
+		for x in range(round(delay / self.dt)):			
+			#Heun Method - use more precise alternative
+			zp = last + self._delayf(last)*self.dt
+			last = last + (self._delayf(last) + self._delayf(zp))*self.dt/2.0
+
 		while last[2] > 0:			
 			#Heun Method - use more precise alternative
 			zp = last + self._stepf(last)*self.dt
@@ -23,6 +28,11 @@ class RocketSimulation:
 	def _norm(self, arr):
 		n = np.linalg.norm(arr)
 		return arr/n if n else np.array((0, 0, 0))
+
+	def _delayf(self, z):
+		vx, vy, vz = z[3:6] # get velocity
+
+		return np.array((vx, vy, vz, 0, 0, 0))
 
 
 	def _stepf(self, z):
