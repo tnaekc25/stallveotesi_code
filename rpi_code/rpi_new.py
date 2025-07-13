@@ -227,11 +227,13 @@ def mainloop():
 
     while True:
 
-        loggr.print("READ STATUS:  |" + str(planner_data.decode()), 3)
-        loggr.print("PIXHAWK |" + str(planner_data.decode()), 1 if read_check[0] else 2, "")
-        loggr.print("PLANNER |" + str(planner_data.decode()), 1 if read_check[1] else 2, "")
-        loggr.print("GCS |" + str(planner_data.decode()), 1 if read_check[2] else 2, "\n")
-        loggr.print("Camera |" + str(planner_data.decode()), 1 if read_check[3] else 2, "\n")
+        loggr.print("READ STATUS:  |", 3)
+        loggr.print("PIXHAWK |", 1 if read_check[0] else 2, "")
+        loggr.print("PLANNER |", 1 if read_check[1] else 2, "")
+        loggr.print("GCS |", 1 if read_check[2] else 2, "\n")
+        loggr.print("Camera |", 1 if read_check[3] else 2, "\n")
+
+        read_check = [0, 0, 0, 0]
 
         # PROCESS GCS DATA
         blst = gcs_data.get("NAMED_VALUE_INT")
