@@ -227,7 +227,7 @@ def mainloop():
 
     while True:
 
-        loggr.print("READ STATUS:  |", 3)
+        loggr.print("READ STATUS:  |", 3, "")
         loggr.raw_print("PIXHAWK |", 1 if read_check[0] else 2, "")
         loggr.raw_print("PLANNER |", 1 if read_check[1] else 2, "")
         loggr.raw_print("GCS |", 1 if read_check[2] else 2, "")
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     loggr.print(f"Process Starting on GCS: {IP} - MSIP : {MSIP}...", 3)
 
     loggr.print("Waiting for Pixhawk Hearbeat...", 0)
-    #pixhawk.wait_heartbeat()
+    pixhawk.wait_heartbeat()
     loggr.print("Success!\n", 1)
 
     loggr.print("Connecting GCS and Mission Planner...", 0)
