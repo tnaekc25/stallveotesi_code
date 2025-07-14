@@ -25,8 +25,8 @@ ERROR_WAIT = 0.1
 
 # NETWORK CONST
 
-IP = "10.29.6.165"
-MSIP = "10.29.6.79"
+IP = "10.58.7.165"
+MSIP = "10.58.7.165"
 PORTS = (14550, 14551, 31313) # send recv mp
 
 
@@ -223,15 +223,15 @@ def send_data():
 # PROCESS DATA
 def mainloop():
 
-    global gcs_data, is_det, firing
+    global gcs_data, is_det, firing, read_check
 
     while True:
 
         loggr.print("READ STATUS:  |", 3)
-        loggr.print("PIXHAWK |", 1 if read_check[0] else 2, "")
-        loggr.print("PLANNER |", 1 if read_check[1] else 2, "")
-        loggr.print("GCS |", 1 if read_check[2] else 2, "\n")
-        loggr.print("Camera |", 1 if read_check[3] else 2, "\n")
+        loggr.raw_print("PIXHAWK |", 1 if read_check[0] else 2, "")
+        loggr.raw_print("PLANNER |", 1 if read_check[1] else 2, "")
+        loggr.raw_print("GCS |", 1 if read_check[2] else 2, "")
+        loggr.raw_print("Camera |", 1 if read_check[3] else 2)
 
         read_check = [0, 0, 0, 0]
 
@@ -267,10 +267,19 @@ def mainloop():
 
 
 if __name__ == "__main__":
-    loggr.print("Process Starting...", 0)
+
+    if len(sys.argv) == 2:
+        MSIP = IP = sys.argv[1]
+
+    elif len(sys.argv) == 3:
+        IP = sys.argv[1]
+        MSIP = sys.argv[2]
+
+
+    loggr.print(f"Process Starting on GCS: {IP} - MSIP : {MSIP}...", 3)
 
     loggr.print("Waiting for Pixhawk Hearbeat...", 0)
-    pixhawk.wait_heartbeat()
+    #pixhawk.wait_heartbeat()
     loggr.print("Success!\n", 1)
 
     loggr.print("Connecting GCS and Mission Planner...", 0)
