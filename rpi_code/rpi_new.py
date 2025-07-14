@@ -19,6 +19,7 @@ MAIN_WAIT = 0.05
 SEND_WAIT = 0.1
 IMG_WAIT = 0.1
 RECV_WAIT = 0
+LOG_WAIT = 1
 
 ERROR_WAIT = 0.1
 
@@ -220,21 +221,35 @@ def send_data():
             time.sleep(ERROR_WAIT)  
 
 
-# PROCESS DATA
-def mainloop():
 
-    global gcs_data, is_det, firing, read_check
+
+def log():
+
+    global read_check
 
     while True:
-
-        loggr.print("READ STATUS:  |", 3, "")
-        loggr.raw_print("PIXHAWK |", 1 if read_check[0] else 2, "")
-        loggr.raw_print("PLANNER |", 1 if read_check[1] else 2, "")
-        loggr.raw_print("GCS |", 1 if read_check[2] else 2, "")
-        loggr.raw_print("Camera |", 1 if read_check[3] else 2)
+        loggr.print("READ STATUS: ", 3, "")
+        loggr.raw_print("|", 0, "")
+        loggr.raw_print(" PIXHAWK ", 1 if read_check[0] else 2, "")
+        loggr.raw_print("|", 0, "")
+        loggr.raw_print(" PLANNER ", 1 if read_check[1] else 2, "")
+        loggr.raw_print("|", 0, "")
+        loggr.raw_print(" GCS " , 1 if read_check[2] else 2, "")
+        loggr.raw_print("|", 0, "")
+        loggr.raw_print(" Camera ", 1 if read_check[3] else 2)
+        loggr.raw_print("|", 0, "")
 
         read_check = [0, 0, 0, 0]
 
+        time.sleep(LOG_WAIT)
+
+
+# PROCESS DATA
+def mainloop():
+
+    global gcs_data, is_det, firing
+
+    while True:
         # PROCESS GCS DATA
         blst = gcs_data.get("NAMED_VALUE_INT")
         if (blst):
@@ -295,6 +310,7 @@ if __name__ == "__main__":
     Thread(target=detect_and_fire, daemon=True).start()
     Thread(target=send_data, daemon=True).start()
     Thread(target=read_data, daemon=True).start()
+    Thread(target=log, daemon=True).start()
     mainloop()
 
     p.stop()
