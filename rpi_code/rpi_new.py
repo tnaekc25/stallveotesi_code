@@ -15,13 +15,15 @@ import RPi.GPIO as GPIO
 # DELAY CONST
 
 DET_WAIT = 0.1
-MAIN_WAIT = 0.05
+MAIN_WAIT = 0.1
 SEND_WAIT = 0.1
 IMG_WAIT = 0.1
 RECV_WAIT = 0
 LOG_WAIT = 1
 
 ERROR_WAIT = 0.1
+
+FAILSAFE_DELAY = 1.5
 
 
 # NETWORK CONST
@@ -80,6 +82,7 @@ p = GPIO.PWM(SERVO_PIN, 50)
 loggr.print("Success!\n", 1)
 
 read_check = [0, 0, 0, 0]
+signal_lost = False
 
 ## APPLY OBJECT DETECTION AND RUN SIMULATION
 def detect_and_fire():
@@ -137,7 +140,7 @@ def read_send_img():
         try:
             img_feed = img_recv.recv()
             if (img_feed is not None):
-                read_check[3] = 1   
+                read_check[3] += 1   
                 img_send.send(img_feed)
 
             time.sleep(IMG_WAIT)
@@ -166,13 +169,13 @@ def read_data():
                 if (msg):
                     telemetry_data[msg.get_type()] = msg
                     mav_com.send_planner(msg.get_msgbuf())
-                    read_check[0] = 1
+                    read_check[0] += 1
 
             if (mav_com.sock in readable and mav_com.sock_connected):
                 planner_data = mav_com.read_planner()
                 if (planner_data):
                     mav_com.write_pixhawk(planner_data) 
-                    read_check[1] = 1
+                    read_check[1] += 1
 
             if (mav_com.gcs_in.fd in readable and mav_com.mav_connected):
                 msg = mav_com.get_gcs()
@@ -182,7 +185,7 @@ def read_data():
                     else:
                         gcs_data[msg.get_type()].append(msg)
 
-                    read_check[2] = 1
+                    read_check[2] += 1
 
             time.sleep(RECV_WAIT)
         
@@ -228,16 +231,19 @@ def log():
     global read_check
 
     while True:
-        loggr.print("READ STATUS: ", 3, "")
-        loggr.raw_print("|", 0, "")
-        loggr.raw_print(" PIXHAWK ", 1 if read_check[0] else 2, "")
-        loggr.raw_print("|", 0, "")
-        loggr.raw_print(" PLANNER ", 1 if read_check[1] else 2, "")
-        loggr.raw_print("|", 0, "")
-        loggr.raw_print(" GCS " , 1 if read_check[2] else 2, "")
-        loggr.raw_print("|", 0, "")
-        loggr.raw_print(" Camera ", 1 if read_check[3] else 2)
-        loggr.raw_print("|", 0, "")
+        if (signal_lost):
+            loggr.print("RC SIGNAL LOST!", 2)
+        else:
+            loggr.print("READ STATUS: ", 3, "")
+            loggr.raw_print("|", 0, "")
+            loggr.raw_print(f" PIXHAWK:{read_check[0]} ", 1 if read_check[0] else 2, "")
+            loggr.raw_print("|", 0, "")
+            loggr.raw_print(f" PLANNER:{read_check[1]} ", 1 if read_check[1] else 2, "")
+            loggr.raw_print("|", 0, "")
+            loggr.raw_print(f" GCS:{read_check[2]} " , 1 if read_check[2] else 2, "")
+            loggr.raw_print("|", 0, "")
+            loggr.raw_print(f" Camera:{read_check[3]} ", 1 if read_check[3] else 2)
+            loggr.raw_print("|", 0, "")
 
         read_check = [0, 0, 0, 0]
 
@@ -247,9 +253,24 @@ def log():
 # PROCESS DATA
 def mainloop():
 
-    global gcs_data, is_det, firing
+    global gcs_data, is_det, firing, telemetry_data, signal_lost
+
+    lost_start = -1
 
     while True:
+
+        if telemetry_data.get("RC_CHANNELS").signal_lost:
+            if (lost_start >= 0 and time.time() - lost_start > FAILSAFE_DELAY):
+                mav_com.send_fail()
+                loggr.print(" >>> FAIL SAFE <<< ", 2)            
+            else:
+                signal_lost = True
+                lost_start = time.time()
+        
+        elif signal_lost:
+            signal_lost = False 
+
+
         # PROCESS GCS DATA
         blst = gcs_data.get("NAMED_VALUE_INT")
         if (blst):

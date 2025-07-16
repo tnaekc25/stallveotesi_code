@@ -1,6 +1,11 @@
 from pymavlink import mavutil
 import numpy as np, socket, select
 
+PWM_THROTTLE_CUT = 1000
+PWM_ELEVATOR_UP = 2000
+PWM_RUDDER_RIGHT = 2000
+PWM_AILERON_RIGHT = 2000 
+PWM_FLAPS = 1000
 
 class MavConnect:
 
@@ -71,5 +76,18 @@ class MavConnect:
     def send_box(self, box):
         self.gcs_out.mav.statustext_send(
             severity=6,
-            text=str(box).encode('utf-8')
+            text=("BOXINF"+str(box)).encode('utf-8')
         )
+
+    def send_fail(self):
+        """self.pixhawk.mav.rc_channels_override_send(
+                self.pixhawk.target_system,
+                self.pixhawk.target_component,
+                PWM_AILERON_RIGHT,
+                PWM_ELEVATOR_UP,
+                PWM_THROTTLE_CUT,
+                PWM_RUDDER_RIGHT,
+                PWM_FLAPS,
+                0,
+                0, 0 )"""
+        pass

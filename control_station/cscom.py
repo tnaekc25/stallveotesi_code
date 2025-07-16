@@ -95,7 +95,10 @@ class MavCom:
 
         elif msg_type == "STATUSTEXT":
             recvd = (msg.text.rstrip('\x00'))
-            self.boxes.append(tuple(map(int, recvd[1:-1].split(','))))
+
+            if len(recvd) > 6:
+                if recvd[0:6] == "BOXINF":
+                    self.boxes.append(tuple(map(int, recvd[1:-1].split(','))))
 
             return 1
 
