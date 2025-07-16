@@ -41,6 +41,8 @@ MAX_PWM = 12.874
 MDELAY = 1
 SERVO_PIN = 12
 
+SIGNAL_TRESHOLD = 10
+
 
 #############################
 
@@ -263,7 +265,7 @@ def mainloop():
 
     while True:
 
-        if telemetry_data.get("RC_CHANNELS").signal_lost:
+        if telemetry_data.get("RC_CHANNELS") and telemetry_data.get("RC_CHANNELS").rssi < SIGNAL_TRESHOLD:
             if (lost_start >= 0 and time.time() - lost_start > FAILSAFE_DELAY):
                 mav_com.send_fail()
                 loggr.print(" >>> FAIL SAFE <<< ", 2)            
@@ -272,7 +274,7 @@ def mainloop():
                 lost_start = time.time()
         
         elif signal_lost:
-            signal_lost = False 
+            signal_lost = False
 
 
         # PROCESS GCS DATA
@@ -317,16 +319,22 @@ if __name__ == "__main__":
 
 
     loggr.print("Opening Camera Stream...", 3)
-    if (img_recv.start()):
-        loggr.print("Success!\n", 1)
-    else:
+    try:
+        if (img_recv.start()):
+            loggr.print("Success!\n", 1)
+        else:
+            loggr.print("Fail!\n", 2)
+    except:
         loggr.print("Fail!\n", 2)
 
+
     loggr.print("Starting Gstreamer...", 3)
-    img_send.start()
-    if (img_send.start()):
-        loggr.print("Success!\n", 1)
-    else:
+    try:
+        if (img_send.start()):
+            loggr.print("Success!\n", 1)
+        else:
+            loggr.print("Fail!\n", 2)
+    except:
         loggr.print("Fail!\n", 2)
 
     loggr.print("Waiting for Pixhawk Hearbeat...", 3)
