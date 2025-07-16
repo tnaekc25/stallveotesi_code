@@ -40,36 +40,29 @@ class RecvClass:
 
 	def __init__(self):
 
-		gst_pipeline = (
+		self.gst_pipeline = (
     		"libcamerasrc ! "
     		"video/x-raw,width=640,height=480,format=NV12,framerate=30/1 ! "
-    		"videoconvert ! appsink"
-		)
+    		"videoconvert ! appsink")
 
-		self.cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
-
-		if not self.cap.isOpened():
-			print("Failed to open camera stream...")
-			exit()
-
-		print("Camera stream is ready...")
+		self.is_open = False
 
 	def recv(self):
 		ret, frame = self.cap.read()
 		return frame if ret else None
 
-
 	def close(self):
 		self.cap.release()
+		self.is_open = False
 
-	def restart(self):
-		self.cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+	def start(self):
+		self.cap = cv2.VideoCapture(self.gst_pipeline, cv2.CAP_GSTREAMER)
 
 		if not self.cap.isOpened():
-			print("Failed to open camera stream...")
-			exit()
-
-		print("Camera stream is ready...")
+			self.is_open = False
+			return 0
+		self.is_open = True
+		return 1
 
 
 
@@ -86,27 +79,24 @@ class SendClass:
     f'rtph264pay config-interval=1 pt=96 ! '
     f'udpsink host={ip} port={port}'
 )
+		self.width = width
+		self.height = height
+		self.fps = fps
 
-
-		self.out = cv2.VideoWriter(self.gst_pipeline, cv2.CAP_GSTREAMER, 0, fps, (width, height), True)
-
-		if not self.out.isOpened():
-			print("Failed to open video writer...")
-			exit()
-
-		print("Gstreamer is ready...")
+		self.is_open = False
 
 	def send(self, img):
 		self.out.write(img)
 
 	def close(self):
 		self.out.release()
+		self.is_open = False
 
-	def restart(self):
-		self.out = cv2.VideoWriter(self.gst_pipeline, cv2.CAP_GSTREAMER, 0, fps, (width, height), True)
+	def start(self):
+		self.out = cv2.VideoWriter(self.gst_pipeline, cv2.CAP_GSTREAMER, 0, self.fps, (self.width, self.height), True)
 
 		if not self.out.isOpened():
-			print("Failed to open video writer...")
-			exit()
-
-		print("Gstreamer is ready...")
+			self.is_open = False
+			return 0
+		self.is_open = True
+		return 1

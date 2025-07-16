@@ -67,15 +67,17 @@ is_det = False
 
 loggr = Log()
 
-loggr.print("Starting Pixhawk Connection...", 0)
+loggr.print(f"Process Starting on GCS: {IP} - MSIP : {MSIP}...", 3, "\n\n")
+
+loggr.print("Starting Pixhawk Connection...", 3)
 pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
 loggr.print("Success!\n", 1)
 
-loggr.print("Starting GCS Connection...", 0)
+loggr.print("Starting GCS Connection...", 3)
 mav_com = MavConnect(pixhawk)
 loggr.print("Success!\n", 1)
 
-loggr.print("Starting GPIO...", 0)
+loggr.print("Starting GPIO...", 3)
 GPIO.setmode(GPIO.BOARD)
 GPIO.setup(SERVO_PIN, GPIO.OUT)
 p = GPIO.PWM(SERVO_PIN, 50)
@@ -101,7 +103,7 @@ def detect_and_fire():
                     ned = telemetry_data.get("LOCAL_POSITION_NED")
                     hud = telemetry_data.get("VFR_HUD")
         
-                    if (ned and hud):
+                    if (0 and ned and hud):
 
                         # CALCULATE REAL LIFE DISTANCE
                         detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
@@ -138,10 +140,12 @@ def read_send_img():
 
     while True:
         try:
-            img_feed = img_recv.recv()
-            if (img_feed is not None):
-                read_check[3] += 1   
-                img_send.send(img_feed)
+
+            if (img_recv.is_open and img_send.is_open):
+                img_feed = img_recv.recv()
+                if (img_feed is not None):
+                    read_check[3] += 1   
+                    img_send.send(img_feed)
 
             time.sleep(IMG_WAIT)
 
@@ -150,8 +154,8 @@ def read_send_img():
             img_send.close()
             img_recv.close()
             time.sleep(ERROR_WAIT)
-            img_send.restart()
-            img_recv.restart()      
+            img_send.start()
+            img_recv.start()      
 
 
 ## READ TELEMETRY FROM PIXHAWK AND DATA FROM GCS
@@ -312,18 +316,29 @@ if __name__ == "__main__":
         MSIP = sys.argv[2]
 
 
-    loggr.print(f"Process Starting on GCS: {IP} - MSIP : {MSIP}...", 3)
+    loggr.print("Opening Camera Stream...", 3)
+    if (img_recv.start()):
+        loggr.print("Success!\n", 1)
+    else:
+        loggr.print("Fail!\n", 2)
 
-    loggr.print("Waiting for Pixhawk Hearbeat...", 0)
+    loggr.print("Starting Gstreamer...", 3)
+    img_send.start()
+    if (img_send.start()):
+        loggr.print("Success!\n", 1)
+    else:
+        loggr.print("Fail!\n", 2)
+
+    loggr.print("Waiting for Pixhawk Hearbeat...", 3)
     pixhawk.wait_heartbeat()
     loggr.print("Success!\n", 1)
 
-    loggr.print("Connecting GCS and Mission Planner...", 0)
+    loggr.print("Connecting GCS and Mission Planner...", 3)
     mav_com.connect_gcs(IP, *(PORTS[0:2]))
     mav_com.connect_sock(MSIP, PORTS[2])
     loggr.print("Success!\n", 1)
 
-    loggr.print("Starting Servo GPIO...", 0)
+    loggr.print("Starting Servo GPIO...", 3)
     p.start(NET_PWM)
     loggr.print("Success!\n", 1)
 
