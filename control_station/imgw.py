@@ -689,7 +689,7 @@ class MapWidget(QWidget):
 
         painter.setBrush(neon)
         painter.setPen(QPen(glow_color, 1))
-        painter.drawEllipse(round(cur_x - 15*np.sin(self.curret_head) - 7),
+        painter.drawEllipse(round(cur_x + 15*np.sin(self.curret_head) - 7),
          round(cur_y - 15*np.cos(self.curret_head) - 7), 14, 14)
 
         painter.setFont(QFont("Consolas", 8, QFont.Weight.Bold))

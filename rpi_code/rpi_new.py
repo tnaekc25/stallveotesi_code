@@ -2,13 +2,15 @@ from pymavlink import mavutil
 import time, select, socket, numpy as np, sys
 from threading import Thread
 from com.mav import MavConnect
-from com.imgm import RecvClass, SendClass, DetectClass
+from com.imgm import RecvClass, SendClass, DetectClass, VideoSave
 
 from sim.simulation import RocketSimulation
 from sim.rocket import RocketModel
 from sim.envr import EnvironmentModel
 
 from log import Log
+
+from c2 import Deneyap
 
 import RPi.GPIO as GPIO
 
@@ -17,7 +19,7 @@ import RPi.GPIO as GPIO
 DET_WAIT = 0.1
 MAIN_WAIT = 0.1
 SEND_WAIT = 0.1
-IMG_WAIT = 0.1
+IMG_WAIT = 0
 RECV_WAIT = 0
 LOG_WAIT = 1
 
@@ -28,7 +30,7 @@ FAILSAFE_DELAY = 1.5
 
 # NETWORK CONST
 
-IP = "10.58.7.165"
+IP = "192.168.0.101"
 MSIP = "10.58.7.165"
 PORTS = (14550, 14551, 31313) # send recv mp
 
@@ -57,6 +59,9 @@ rocket = RocketModel(mass = 241, carea = 0.06, cd_path = "")
 sim = RocketSimulation(dt = 0.1, rocket = rocket, envr = envr)
 
 
+video = VideoSave()
+
+
 #############################
 
 telemetry_data = {}
@@ -68,8 +73,6 @@ firing = False
 is_det = False
 
 loggr = Log()
-
-loggr.print(f"Process Starting on GCS: {IP} - MSIP : {MSIP}...", 3, "\n\n")
 
 loggr.print("Starting Pixhawk Connection...", 3)
 pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
@@ -111,22 +114,16 @@ def detect_and_fire():
                         detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
                         (box[2] + box[4]) / 2, 0, 0, hud.alt)
 
-                        print(detx, dety)
-
                         c = sim.simulate(np.array((0, 0, hud.alt, ned.vx, ned.vy, ned.vz)), MDELAY)
                         x, y, z = c[0:3]
-                        
-                        print(x, y, z)
 
                         cls = box[0]
 
-                        """
                         if (abs(detx-x) < 2 and abs(dety-y) < 2 and firing == False):
                             firing = True
-                            print("FIRE CONDITION")
+                            loggr.print("AUTO ACTIVATE MECHANISM", 3)
                             p.ChangeDutyCycle(MAX_PWM if cls else MIN_PWM)
                             firing = False
-                        """
 
             time.sleep(DET_WAIT)
         
@@ -146,8 +143,8 @@ def read_send_img():
             if (img_recv.is_open and img_send.is_open):
                 img_feed = img_recv.recv()
                 if (img_feed is not None):
-                    read_check[3] += 1   
                     img_send.send(img_feed)
+                    read_check[3] += 1
 
             time.sleep(IMG_WAIT)
 
@@ -158,6 +155,20 @@ def read_send_img():
             time.sleep(ERROR_WAIT)
             img_send.start()
             img_recv.start()      
+
+def save_img():
+    global img_feed
+
+    while True:
+        try:
+            if (img_feed is not None):
+                video.out.write(img_feed)
+
+            time.sleep(0.05)
+
+        except Exception as e:
+            loggr.print("ERROR AT SAVE 1 " + str(e), 2)        
+
 
 
 ## READ TELEMETRY FROM PIXHAWK AND DATA FROM GCS
@@ -248,8 +259,11 @@ def log():
             loggr.raw_print("|", 0, "")
             loggr.raw_print(f" GCS:{read_check[2]} " , 1 if read_check[2] else 2, "")
             loggr.raw_print("|", 0, "")
-            loggr.raw_print(f" Camera:{read_check[3]} ", 1 if read_check[3] else 2)
+            loggr.raw_print(f" Camera:{read_check[3]} ", 1 if read_check[3] else 2, "")
             loggr.raw_print("|", 0, "")
+            if telemetry_data.get("RC_CHANNELS"):
+                loggr.raw_print(f" ({telemetry_data.get('RC_CHANNELS').rssi}) ", 3)
+                loggr.raw_print("|", 0, "")
 
         read_check = [0, 0, 0, 0]
 
@@ -265,9 +279,10 @@ def mainloop():
 
     while True:
 
+        # FAILSAFE
         if telemetry_data.get("RC_CHANNELS") and telemetry_data.get("RC_CHANNELS").rssi < SIGNAL_TRESHOLD:
             if (lost_start >= 0 and time.time() - lost_start > FAILSAFE_DELAY):
-                mav_com.send_fail()
+                #mav_com.send_fail()
                 loggr.print(" >>> FAIL SAFE <<< ", 2)            
             else:
                 signal_lost = True
@@ -275,6 +290,7 @@ def mainloop():
         
         elif signal_lost:
             signal_lost = False
+            lost_start = -1
 
 
         # PROCESS GCS DATA
@@ -318,6 +334,8 @@ if __name__ == "__main__":
         MSIP = sys.argv[2]
 
 
+    loggr.print(f"Process Starting on GCS: {IP} - MSIP : {MSIP}...", 3, "\n\n")
+
     loggr.print("Opening Camera Stream...", 3)
     try:
         if (img_recv.start()):
@@ -351,10 +369,18 @@ if __name__ == "__main__":
     loggr.print("Success!\n", 1)
 
     Thread(target=read_send_img, daemon=True).start()
+    Thread(target=save_img, daemon=True).start()
     Thread(target=detect_and_fire, daemon=True).start()
     Thread(target=send_data, daemon=True).start()
     Thread(target=read_data, daemon=True).start()
     Thread(target=log, daemon=True).start()
+
+    try:
+        dyp = Deneyap()
+        Thread(target=dyp.loop(), daemon=True).start()
+    except:
+        pass
+
     mainloop()
 
     p.stop()

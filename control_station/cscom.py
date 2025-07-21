@@ -1,5 +1,5 @@
 import os
-os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
+#os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
 
 from pymavlink import mavutil
 import time, cv2
