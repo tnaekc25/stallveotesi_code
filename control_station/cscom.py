@@ -89,8 +89,9 @@ class MavCom:
             return 1
     
         # Control Inputs (throttle, roll, pitch, yaw)
-        elif msg_type == "RC_CHANNELS_RAW":
-            self.cont_inputs = (msg.chan3_raw, msg.chan1_raw, msg.chan2_raw, msg.chan4_raw)
+        elif msg_type == "RC_CHANNELS":
+            self.cont_inputs = [msg.chan3_raw, msg.chan1_raw, msg.chan2_raw, msg.chan4_raw]
+            self.cont_inputs = tuple([(max(0, min(1, ((x-988) / 993))) if x is not None else 0) for x in self.cont_inputs])
             return 1
 
         elif msg_type == "STATUSTEXT":

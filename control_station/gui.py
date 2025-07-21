@@ -17,7 +17,7 @@ os.environ['QT_SCALE_FACTOR'] = '1'
 os.environ['QT_FONT_DPI'] = '0'
 
 upimg = None
-IP = "192.168.0.102" 
+IP = "10.209.16.118" 
 PORT1 = 14550 
 PORT2 = 14551
 
@@ -176,17 +176,6 @@ class BottomWidget(ImageWidget):
     
     def updateValues(self):
 
-        com.airspeed = 1234.5
-        com.altitude = 1234.5
-        com.attitude = (0.3, 0.2, 0)
-        com.heading = 145
-        com.gps_pos = (40.985348374541964, 28.816658359493513)
-
-        self.bar1.setSlide(0.3)
-        self.bar2.setSlide(0.4)
-        self.bar3.setSlide(0.2)
-        self.bar4.setSlide(0.7)
-
         if self.is_updating:
             return
         self.is_updating = True
@@ -213,11 +202,10 @@ class BottomWidget(ImageWidget):
 
         self.image1.updatePosition(*com.gps_pos, np.deg2rad(com.heading))
 
-        #self.bar1.setSlide(com.cont_inputs[0] / 1000 - 1)
-        #self.bar2.setSlide(com.cont_inputs[1] / 1000 - 1)
-        #self.bar3.setSlide(com.cont_inputs[2] / 1000 - 1)
-        #self.bar4.setSlide(com.cont_inputs[3] / 1000 - 1)
-        
+        self.bar1.setSlide(com.cont_inputs[0])
+        self.bar2.setSlide(com.cont_inputs[1])
+        self.bar3.setSlide(com.cont_inputs[2])
+        self.bar4.setSlide(com.cont_inputs[3])
 
         self.telem.setText(self.telem_text.format(*[format(x, ".5g") for x in (
             com.airspeed, com.altitude, com.heading, 0,

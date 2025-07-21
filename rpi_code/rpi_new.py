@@ -143,6 +143,7 @@ def read_send_img():
             if (img_recv.is_open and img_send.is_open):
                 img_feed = img_recv.recv()
                 if (img_feed is not None):
+                    print("sendimg")
                     img_send.send(img_feed)
                     read_check[3] += 1
 
@@ -279,7 +280,7 @@ def mainloop():
 
     while True:
 
-        # FAILSAFE
+        """# FAILSAFE
         if telemetry_data.get("RC_CHANNELS") and telemetry_data.get("RC_CHANNELS").rssi < SIGNAL_TRESHOLD:
             if (lost_start >= 0 and time.time() - lost_start > FAILSAFE_DELAY):
                 #mav_com.send_fail()
@@ -290,7 +291,7 @@ def mainloop():
         
         elif signal_lost:
             signal_lost = False
-            lost_start = -1
+            lost_start = -1"""
 
 
         # PROCESS GCS DATA
