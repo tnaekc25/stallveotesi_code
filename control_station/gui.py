@@ -37,11 +37,11 @@ class BottomWidget(ImageWidget):
         self.image_comp.setFactors(0.15, 0.261, 0.7944, 0.3461)
         self.children.append(self.image_comp)
 
-        self.rot1 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.001, self)
+        self.rot1 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.0005, self)
         self.rot1.setFactors(0.03125, 0.054, 0.310764, 0.51)
         self.children.append(self.rot1)
 
-        self.rot2 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.001, self)
+        self.rot2 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.0005, self)
         self.rot2.setFactors(0.03125, 0.054, 0.310764, 0.186)
         self.children.append(self.rot2)
 
@@ -256,7 +256,7 @@ class BottomWidget(ImageWidget):
         self.vertical_tape.setNumber(com.vertical_speed)
         self.ground_tape.setNumber(com.ground_speed)
 
-        self.telem.setText(self.telem_text.format(*[format(x, ".5g") if type(x) == int else x for x in (
+        self.telem.setText(self.telem_text.format(*[format(x, ".4g") if type(x) != str else x for x in (
             com.airspeed, com.altitude, com.heading, 0,
             roll*360, pitch*360, com.attitude[2] * (360 / (np.pi * 2)), "NO", com.battery_per,
             com.battery_volt, "YES", com.cont_inputs[0])]))
@@ -278,7 +278,7 @@ class MainWindow(QWidget):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        top_bar = QLabel("Control Station Test Run")
+        top_bar = QLabel("Stall ve Ötesi Control Station")
         top_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         

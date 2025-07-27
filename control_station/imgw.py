@@ -667,28 +667,34 @@ class MapWidget(QWidget):
         deg_per_px_y = self.lat_range / (height / 2)
 
         lon = self.center_lon
+        i = 0
         while True:
             dx = int((lon - self.center_lon) / deg_per_px_x)
             x = center_x + dx
             if 0 <= x <= width:
                 painter.drawLine(x, 0, x, height)
-                label = f"{lon:.2f}°"
+                label = f"{lon:.3f}°"
                 painter.setFont(QFont("Consolas", self.scaled(6)))
-                painter.drawText(x + self.scaled(2), self.scaled(12), label)
+                painter.drawText(x + self.scaled(2), self.scaled(12) + self.scaled(15)*i, label)
                 lon += self.grid_lon_spacing
+
+                i = (i + 1) % 2
             else:
                 break
 
         lon = self.center_lon - self.grid_lon_spacing
+        i = 1
         while True:
             dx = int((lon - self.center_lon) / deg_per_px_x)
             x = center_x + dx
             if 0 <= x <= width:
                 painter.drawLine(x, 0, x, height)
-                label = f"{lon:.2f}°"
+                label = f"{lon:.3f}°"
                 painter.setFont(QFont("Consolas", self.scaled(6)))
-                painter.drawText(x + self.scaled(2), self.scaled(12), label)
+                painter.drawText(x + self.scaled(2), self.scaled(12) + self.scaled(15)*i, label)
                 lon -= self.grid_lon_spacing
+
+                i = (i + 1) % 2
             else:
                 break
 
@@ -698,7 +704,7 @@ class MapWidget(QWidget):
             y = center_y + dy
             if 0 <= y <= height:
                 painter.drawLine(0, y, width, y)
-                label = f"{lat:.2f}°"
+                label = f"{lat:.3f}°"
                 painter.setFont(QFont("Consolas", self.scaled(6)))
                 painter.drawText(self.scaled(2), y - self.scaled(2), label)
                 lat -= self.grid_lat_spacing
@@ -711,7 +717,7 @@ class MapWidget(QWidget):
             y = center_y + dy
             if 0 <= y <= height:
                 painter.drawLine(0, y, width, y)
-                label = f"{lat:.2f}°"
+                label = f"{lat:.3f}°"
                 painter.setFont(QFont("Consolas", self.scaled(6)))
                 painter.drawText(self.scaled(2), y - self.scaled(2), label)
                 lat += self.grid_lat_spacing

@@ -146,5 +146,6 @@ class ImageCom:
         return None
 
     def close(self):
-        if (self.cap):
+        if self.cap:
             self.cap.release()
+            self.cap = None
