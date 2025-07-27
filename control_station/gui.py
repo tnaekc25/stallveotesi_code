@@ -37,19 +37,19 @@ class BottomWidget(ImageWidget):
         self.image_comp.setFactors(0.15, 0.261, 0.7944, 0.3461)
         self.children.append(self.image_comp)
 
-        self.rot1 = PotentiometerWidget("src/dial.png", self, 0.01, 0.003, self)
+        self.rot1 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.001, self)
         self.rot1.setFactors(0.03125, 0.054, 0.310764, 0.51)
         self.children.append(self.rot1)
 
-        self.rot2 = PotentiometerWidget("src/dial.png", self, 0.01, 0.003, self)
+        self.rot2 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.001, self)
         self.rot2.setFactors(0.03125, 0.054, 0.310764, 0.186)
         self.children.append(self.rot2)
 
-        self.rot3 = PotentiometerWidget("src/dial.png", self, 1, 0.003, self)
+        self.rot3 = PotentiometerWidget("src/dial.png", self, 2, 1, 0.003, self)
         self.rot3.setFactors(0.03125, 0.054, 0.1215, 0.186)
         self.children.append(self.rot3)
 
-        self.rot4 = PotentiometerWidget("src/dial.png", self, 1, 0.003, self)
+        self.rot4 = PotentiometerWidget("src/dial.png", self, 2, 1, 0.003, self)
         self.rot4.setFactors(0.03125, 0.054, 0.1215, 0.51)
         self.children.append(self.rot4)
 
@@ -160,6 +160,7 @@ class BottomWidget(ImageWidget):
 
         self.bt26 = StyledButton2(self, "GPS", self)
         self.bt26.setFactors(0.026, 0.045, 0.22, 0.075)
+        self.bt26.clicked.connect(lambda : self.gps_comp.setPos(*com.gps_pos))
         self.children.append(self.bt26)
 
         # |||||||||||||||||||||| Telemetry ||||||||||||||||||||||

@@ -582,7 +582,6 @@ class MapWidget(QWidget):
         self.grid_lon_ref = 5
         self.grid_lat_ref = 5
 
-
         self._wf = 1
         self._hf = 1
         self._offx = 0.5
@@ -620,6 +619,11 @@ class MapWidget(QWidget):
         self.current_lat = lat
         self.current_lon = lon
         self.curret_head = head
+        self.update()
+
+    def setPos(self, lat, lon):
+        self.center_lat = lat
+        self.center_lon = lon
         self.update()
 
 
@@ -745,12 +749,12 @@ class MapWidget(QWidget):
 
 
 class PotentiometerWidget(ImageWidget):
-    def __init__(self, image_path, parent_widget, defval = 0, trnf = 1, parent=None):
+    def __init__(self, image_path, parent_widget, defval = 0, minval = 0, trnf = 1, parent=None):
         super().__init__(image_path, parent_widget, parent)
         self.dragging = False
         self.last = None
         self.counter = defval
-        self.defval = defval
+        self.minval = minval
         self.trnf = trnf
         self.changed = True
 
@@ -787,7 +791,7 @@ class PotentiometerWidget(ImageWidget):
 
         self.setRotation((self.rot + diff) / 360)
         self.last = angle
-        self.counter = max(self.defval, self.counter + self.trnf*diff)
+        self.counter = max(self.minval, self.counter + self.trnf*diff)
 
         self.update()
 
