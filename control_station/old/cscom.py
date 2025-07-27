@@ -1,10 +1,8 @@
-import os
-os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
-import cv2
 
 from pymavlink import mavutil
+import time, cv2
 from threading import Thread
-
+from random import randint
 
 
 class MavCom:
@@ -21,7 +19,6 @@ class MavCom:
 
         self.airspeed = 0
         self.ground_speed = 0
-        self.vertical_speed = 0
 
         self.cont_inputs = (0, 0, 0, 0)
 
@@ -31,6 +28,42 @@ class MavCom:
         self.battery_per = 0
 
         self.boxes = []
+
+        self.fp = open("out.txt", "r")
+
+    def read_test(self):
+
+
+        if (self.mav_in == None):
+            return
+
+        def exg(inp):
+            return max(0, min(1, 0.5 + (inp-0.5)*1.2))
+
+
+        line = self.fp.readline()
+
+        time.sleep(0.056)
+
+        if (randint(0, 5)) < 3:
+            return
+
+        arr = [float(x) for x in line.split(" ")]
+    
+        self.attitude = (arr[3], arr[4], arr[5])
+        
+        self.heading = arr[6]
+        self.altitude = arr[2] 
+    
+        self.airspeed = arr[1]*0.8
+        self.ground_speed = 0
+    
+        self.cont_inputs = list(map(exg, (arr[7], arr[8], arr[9], arr[10])))
+    
+        self.gps_pos = (arr[11], arr[12])
+    
+        self.battery_volt = 0
+        self.battery_per = 0
 
 
     def connect(self, ip, port1, port2):
@@ -75,7 +108,6 @@ class MavCom:
         elif msg_type == "VFR_HUD":
             self.airspeed = msg.airspeed
             self.ground_speed = msg.groundspeed
-            self.vertical_speed = msg.climb
             self.heading = msg.heading
             self.altitude = msg.alt if msg.alt > 0 else 0
             return 1
@@ -108,15 +140,11 @@ class MavCom:
 
 
     def send_button(self, i):
-        if (self.mav_out):
-            self.mav_out.mav.named_value_int_send(
-                int(i*10),
-                b"button_data",
-                i
-            )
-
-        else:
-            print("ERROR! CONNECT FIRST...")
+        self.mav_out.mav.named_value_int_send(
+            int(i*10),
+            b"button_data",
+            i
+        )
 
     def draw_rect(self, img):
         if (self.boxes):
@@ -124,7 +152,6 @@ class MavCom:
             self.boxes.pop()
             cls, x1, y1, x2, y2 = box
             cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255 if cls else 0, 0 if cls else 255), 2)
-
 
 
 class ImageCom:
@@ -145,6 +172,6 @@ class ImageCom:
             return last
         return None
 
-    def close(self):
+    def close():
         if (self.cap):
             self.cap.release()

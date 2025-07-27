@@ -369,9 +369,9 @@ if __name__ == "__main__":
     p.start(NET_PWM)
     loggr.print("Success!\n", 1)
 
-    Thread(target=read_send_img, daemon=True).start()
-    Thread(target=save_img, daemon=True).start()
-    Thread(target=detect_and_fire, daemon=True).start()
+    #Thread(target=read_send_img, daemon=True).start()
+    #Thread(target=save_img, daemon=True).start()
+    #Thread(target=detect_and_fire, daemon=True).start()
     Thread(target=send_data, daemon=True).start()
     Thread(target=read_data, daemon=True).start()
     Thread(target=log, daemon=True).start()

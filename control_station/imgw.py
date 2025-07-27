@@ -49,7 +49,6 @@ class ImageWidget(QWidget):
         self.rf = rf
 
         self.rescaleImage()
-        self.updateGeometry()
 
 
     def rescaleImage(self):
@@ -79,13 +78,11 @@ class ImageWidget(QWidget):
 
 
     def setRotation(self, degree):
-        self.rot = 360 * degree * self.rf + self.intr
-        self.updateGeometry()
+        self.rot = (360 * degree * self.rf + self.intr) % 360
 
 
     def resizeEvent(self, event):
         self.rescaleImage()
-        self.updateGeometry()
         return super().resizeEvent(event)
 
 
@@ -107,11 +104,6 @@ class SlideDigit(QWidget):
     def __init__(self, parent_widget, parent = None):
         super().__init__(parent)
 
-        #self.setAutoFillBackground(True)
-        #palette = self.palette()
-        #palette.setColor(QPalette.ColorRole.Window, QColor("blue"))  # or QColor(0, 0, 255)
-        #self.setPalette(palette)
-
         self.parent_widget = parent_widget
         self.ratio = 0
 
@@ -125,8 +117,6 @@ class SlideDigit(QWidget):
         self._hf = hf
         self._offx = offx
         self._offy = offy
-
-        self.updateGeometry()
 
 
     def updateGeometry(self):
@@ -162,11 +152,8 @@ class SlideDigit(QWidget):
 
         self.ratio = ratio
 
-        self.updateGeometry()
-
 
     def resizeEvent(self, event):
-        self.updateGeometry()
         return super().resizeEvent(event)
 
     def paintEvent(self, event):
@@ -277,11 +264,9 @@ class Attitude(ImageWidget):
         self.rf = rf
 
         self.rescaleImage()
-        self.updateGeometry()
 
     def setVertical(self, ratio):
         self.ratio = ratio if abs(ratio) < 1.5 else -1.5 if ratio < -1.5 else 1.5  
-        self.updateGeometry()
 
 
     def updateGeometry(self):
@@ -351,15 +336,11 @@ class BarWidget(QWidget):
         self._offx = offx
         self._offy = offy
 
-        self.updateGeometry()
 
     def setSlide(self, ratio):
-
         self.ratio = ratio
-        self.updateGeometry()
 
     def resizeEvent(self, event):
-        self.updateGeometry()
         return super().resizeEvent(event)
 
     def updateGeometry(self):
@@ -423,10 +404,8 @@ class StyledButton(QPushButton):
         self._offx = offx
         self._offy = offy
 
-        self.updateGeometry()
 
     def resizeEvent(self, event):
-        self.updateGeometry()
         return super().resizeEvent(event)
 
     def updateGeometry(self):
@@ -490,10 +469,8 @@ class StyledButton2(QPushButton):
         self._offx = offx
         self._offy = offy
 
-        self.updateGeometry()
 
     def resizeEvent(self, event):
-        self.updateGeometry()
         return super().resizeEvent(event)
 
     def updateGeometry(self):
@@ -534,8 +511,6 @@ class TelemBox(QWidget):
         self._offy = offy
         self.basef = basef
 
-        self.updateGeometry()
-
 
     def updateGeometry(self):
 
@@ -565,7 +540,6 @@ class TelemBox(QWidget):
         self.text = text
 
     def resizeEvent(self, event):
-        self.updateGeometry()
         return super().resizeEvent(event)
 
     def paintEvent(self, event):
@@ -599,21 +573,28 @@ class MapWidget(QWidget):
         self.current_lon = lon
         self.curret_head = 0
 
-        self.lat_range = 1
-        self.lon_range = 1
-        self.grid_deg_spacing = 0.2
+        self.lat_range = 0.02
+        self.lon_range = 0.02
+
+        self.grid_lon_spacing = 0.007
+        self.grid_lat_spacing = 0.007
+
+        self.grid_lon_ref = 5
+        self.grid_lat_ref = 5
+
 
         self._wf = 1
         self._hf = 1
         self._offx = 0.5
         self._offy = 0.5
 
+        self.scale = 0
+
     def setFactors(self, wf, hf, offx, offy):
         self._wf = wf
         self._hf = hf
         self._offx = offx
         self._offy = offy
-        self.updateGeometry()
         self.update()
 
     def updateGeometry(self):
@@ -628,10 +609,11 @@ class MapWidget(QWidget):
         posx = round(pw * self._offx - self.imgw // 2)
         posy = round(ph * self._offy - self.imgh // 2)
 
+        self.scale = self.imgw / 350
+
         self.setGeometry(posx, posy, self.imgw, self.imgh)
 
     def resizeEvent(self, event):
-        self.updateGeometry()
         super().resizeEvent(event)
 
     def updatePosition(self, lat, lon, head):
@@ -640,64 +622,276 @@ class MapWidget(QWidget):
         self.curret_head = head
         self.update()
 
+
+    def setRangeLA(self, rangev):
+        self.lat_range = rangev
+        self.grid_lat_spacing = rangev / self.grid_lat_ref
+
+    def setRangeLO(self, rangev):
+        self.lon_range = rangev
+        self.grid_lon_spacing = rangev / self.grid_lon_ref
+
+    def setGridRefLO(self, rangev):
+        self.grid_lon_ref = rangev
+        self.grid_lon_spacing = self.lon_range / self.grid_lon_ref
+
+    def setGridRefLA(self, rangev):
+        self.grid_lat_ref = rangev
+        self.grid_lat_spacing = self.lat_range / self.grid_lat_ref
+
+
+    def scaled(self, val):
+        return round(self.scale*val)
+
+
     def paintEvent(self, event):
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         neon = QColor(0, 255, 100, 220)
         pen = QPen(neon)
-        pen.setWidth(1)
+        pen.setWidth(self.scaled(1))
         painter.setPen(pen)
 
         width = self.imgw
         height = self.imgh
+        center_x = width // 2
+        center_y = height // 2
 
-        lat_min = self.center_lat - self.lat_range
-        lat_max = self.center_lat + self.lat_range
-        lon_min = self.center_lon - self.lon_range
-        lon_max = self.center_lon + self.lon_range
+        deg_per_px_x = self.lon_range / (width / 2)
+        deg_per_px_y = self.lat_range / (height / 2)
 
-        lon = lon_min
-        while lon <= lon_max:
-            x = int((lon - lon_min) / (lon_max - lon_min) * width)
-            painter.drawLine(x, 0, x, height)
-            label = f"{lon:.1f}°"
-            painter.setFont(QFont("Consolas", 6))
-            painter.drawText(x + 2, 12, label)
-            lon += self.grid_deg_spacing
+        lon = self.center_lon
+        while True:
+            dx = int((lon - self.center_lon) / deg_per_px_x)
+            x = center_x + dx
+            if 0 <= x <= width:
+                painter.drawLine(x, 0, x, height)
+                label = f"{lon:.2f}°"
+                painter.setFont(QFont("Consolas", self.scaled(6)))
+                painter.drawText(x + self.scaled(2), self.scaled(12), label)
+                lon += self.grid_lon_spacing
+            else:
+                break
 
-        lat = lat_max
-        while lat >= lat_min:
-            y = int((lat_max - lat) / (lat_max - lat_min) * height)
-            painter.drawLine(0, y, width, y)
-            label = f"{lat:.1f}°"
-            painter.setFont(QFont("Consolas", 6))
-            painter.drawText(2, y - 2, label)
-            lat -= self.grid_deg_spacing
+        lon = self.center_lon - self.grid_lon_spacing
+        while True:
+            dx = int((lon - self.center_lon) / deg_per_px_x)
+            x = center_x + dx
+            if 0 <= x <= width:
+                painter.drawLine(x, 0, x, height)
+                label = f"{lon:.2f}°"
+                painter.setFont(QFont("Consolas", self.scaled(6)))
+                painter.drawText(x + self.scaled(2), self.scaled(12), label)
+                lon -= self.grid_lon_spacing
+            else:
+                break
 
-        cur_x = int((self.current_lon - lon_min) / (lon_max - lon_min) * width)
-        cur_y = int((lat_max - self.current_lat) / (lat_max - lat_min) * height)
+        lat = self.center_lat
+        while True:
+            dy = int((self.center_lat - lat) / deg_per_px_y)
+            y = center_y + dy
+            if 0 <= y <= height:
+                painter.drawLine(0, y, width, y)
+                label = f"{lat:.2f}°"
+                painter.setFont(QFont("Consolas", self.scaled(6)))
+                painter.drawText(self.scaled(2), y - self.scaled(2), label)
+                lat -= self.grid_lat_spacing
+            else:
+                break
+
+        lat = self.center_lat + self.grid_lat_spacing
+        while True:
+            dy = int((self.center_lat - lat) / deg_per_px_y)
+            y = center_y + dy
+            if 0 <= y <= height:
+                painter.drawLine(0, y, width, y)
+                label = f"{lat:.2f}°"
+                painter.setFont(QFont("Consolas", self.scaled(6)))
+                painter.drawText(self.scaled(2), y - self.scaled(2), label)
+                lat += self.grid_lat_spacing
+            else:
+                break
+
+        cur_x = int((self.current_lon - self.center_lon) / deg_per_px_x + center_x)
+        cur_y = int((self.center_lat - self.current_lat) / deg_per_px_y + center_y)
 
         glow_color = QColor(0, 255, 100, 180)
         painter.setBrush(glow_color)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(cur_x - 14, cur_y - 14, 28, 28)
+        painter.drawEllipse(cur_x - self.scaled(10), cur_y - self.scaled(10), self.scaled(20), self.scaled(20))
 
         painter.setBrush(QColor(255, 0, 0, 220))
         painter.setPen(QPen(Qt.GlobalColor.black, 1))
-        painter.drawEllipse(cur_x - 7, cur_y - 7, 14, 14)
+        painter.drawEllipse(cur_x - self.scaled(5), cur_y - self.scaled(5), self.scaled(10), self.scaled(10))
 
         painter.setBrush(neon)
         painter.setPen(QPen(glow_color, 1))
-        painter.drawEllipse(round(cur_x + 15*np.sin(self.curret_head) - 7),
-         round(cur_y - 15*np.cos(self.curret_head) - 7), 14, 14)
+        painter.drawEllipse(round(cur_x + self.scaled(10)*np.sin(self.curret_head) - self.scaled(5)),
+                            round(cur_y - self.scaled(10)*np.cos(self.curret_head) - self.scaled(5)),
+                            self.scaled(10), self.scaled(10))
 
-        painter.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+        painter.setFont(QFont("Consolas", self.scaled(6), QFont.Weight.Bold))
         painter.setPen(neon)
         coord_text = f"Lat: {self.current_lat:.4f}\nLon: {self.current_lon:.4f}"
         lines = coord_text.split('\n')
         line_height = painter.fontMetrics().height()
         for i, line in enumerate(lines):
-            painter.drawText(cur_x + 25, cur_y - 20 + i * line_height, line)
+            painter.drawText(cur_x + self.scaled(25), cur_y - self.scaled(20) + i * line_height, line)
 
         painter.end()
+
+
+
+class PotentiometerWidget(ImageWidget):
+    def __init__(self, image_path, parent_widget, defval = 0, trnf = 1, parent=None):
+        super().__init__(image_path, parent_widget, parent)
+        self.dragging = False
+        self.last = None
+        self.counter = defval
+        self.defval = defval
+        self.trnf = trnf
+        self.changed = True
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.dragging == False:
+                initial_pos = event.position()
+
+                dx = initial_pos.x() - self.width() / 2
+                dy = self.height() / 2 - initial_pos.y()
+
+                self.last = np.degrees(np.arctan2(dy, dx)) + 180
+
+                self.dragging = True
+
+    def mouseMoveEvent(self, event):
+        if self.dragging:
+            self.update_rotation_from_pos(event.position())
+            self.changed = True
+
+    def mouseReleaseEvent(self, event):
+        self.dragging = False
+
+    def update_rotation_from_pos(self, pos):
+        dx = pos.x() - self.width() / 2
+        dy = self.height() / 2 - pos.y()
+        angle = np.degrees(np.arctan2(dy, dx)) + 180
+
+        diff = self.last - angle
+        if (diff > 100):
+            diff = diff - 360
+
+        elif (diff < -100):
+            diff = diff + 360
+
+        self.setRotation((self.rot + diff) / 360)
+        self.last = angle
+        self.counter = max(self.defval, self.counter + self.trnf*diff)
+
+        self.update()
+
+
+
+class TapeIndicator(QWidget):
+    def __init__(self, parent_widget, parent=None):
+        super().__init__(parent)
+        self.parent_widget = parent_widget
+        self.ratio = 0
+        self.draw_count = 5
+        self.font1 = 10
+        self.rect_lst = []
+        self._wf = 0.1
+        self._hf = 0.1
+        self._offx = 0.5
+        self._offy = 0.5
+        self.ref = 0
+
+    def setFactors(self, wf, hf, offx, offy):
+        self._wf = wf 
+        self._hf = hf
+        self._offx = offx
+        self._offy = offy
+
+    def setNumber(self, num):
+        self.ratio = num - int(num)
+        self.ref = int(num)
+
+    def updateGeometry(self):
+        pw = self.parent_widget.width()
+        ph = self.parent_widget.height()
+
+        hr = max(ph, pw / RATIO) * self._hf
+
+        self.imgw = round(max(pw, ph * RATIO) * self._wf)
+        self.imgh = round(hr)
+
+        csize = self.imgh / self.draw_count
+
+        posx = round(pw * self._offx - self.imgw // 2)
+        posy = round(ph * self._offy - self.imgh // 2)
+
+        self.rect_lst.clear()
+
+        for i in range(self.draw_count + 1, -1, -1):
+            top = round(csize * (i - self.draw_count / 2) + csize*self.ratio)
+            bottom = round(csize * i - self.draw_count / 2 + 1 + csize*self.ratio)
+            self.rect_lst.append(QRect(QPoint(0, top + round(3*csize/4)),
+             QPoint(self.imgw, bottom + round(3*csize/4))))
+
+        self.scale = self.imgw / 100
+
+        self.setGeometry(posx, posy, self.imgw, self.imgh)
+        self.update()
+
+    def resizeEvent(self, event):
+        return super().resizeEvent(event)
+
+    def scaled(self, val):
+        return round(self.scale*val)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    
+        font = QFont("Arial", self.scaled(self.font1))
+        font.setBold(True)
+        painter.setFont(font)
+    
+        painter.fillRect(self.rect(), QColor(8, 8, 8))
+    
+        center_index = (self.draw_count + 2) // 2
+        full_tick_length = int(self.imgw * 0.4)
+        half_tick_length = int(self.imgw * 0.2)
+        text_padding = 5
+    
+        for i, rect in enumerate(self.rect_lst):
+            is_center = (i == center_index)
+            y = (rect.top() + rect.bottom()) // 2
+    
+            tick_len = full_tick_length
+            painter.setPen(QColor(200, 200, 200))
+            painter.drawLine(self.imgw - tick_len, y, self.imgw, y)
+    
+            value = str(i - center_index + self.ref)
+    
+            text_rect = QRect(0, rect.top(), self.imgw - tick_len - text_padding, rect.height())
+    
+            if is_center:
+                painter.setPen(QColor(255, 165, 0))
+            else:
+                painter.setPen(QColor(160, 90, 0))
+    
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, value)
+    
+        painter.setPen(QColor(0, 150, 150))
+        for i in range(len(self.rect_lst) - 1):
+            top = self.rect_lst[i].bottom()
+            bottom = self.rect_lst[i + 1].top()
+            y = (top + bottom) // 2
+    
+            painter.drawLine(self.imgw - half_tick_length, y, self.imgw, y)
+    
+        painter.end()
+            
+                                
