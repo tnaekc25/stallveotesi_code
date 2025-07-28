@@ -224,12 +224,12 @@ def send_data():
 
     while True:
         try:
+
+            mav_com.send_heartbeat()
+
             for _, msg in list(telemetry_data.items()):
                     if (msg) and not msg.get_type().startswith("UNKNOWN_"):
                         mav_com.send_gcs(msg)
-
-                        """if (msg.get_type() == "GLOBAL_POSITION_INT"):
-                            print((msg.lat / 1e7, msg.lon / 1e7))"""
 
             # SEND BOXES
             for box in box_data:
@@ -369,9 +369,9 @@ if __name__ == "__main__":
     p.start(NET_PWM)
     loggr.print("Success!\n", 1)
 
-    #Thread(target=read_send_img, daemon=True).start()
-    #Thread(target=save_img, daemon=True).start()
-    #Thread(target=detect_and_fire, daemon=True).start()
+    Thread(target=read_send_img, daemon=True).start()
+    Thread(target=save_img, daemon=True).start()
+    Thread(target=detect_and_fire, daemon=True).start()
     Thread(target=send_data, daemon=True).start()
     Thread(target=read_data, daemon=True).start()
     Thread(target=log, daemon=True).start()

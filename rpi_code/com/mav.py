@@ -89,3 +89,13 @@ class MavConnect:
                 0,
                 0,
                 0, 0 )
+
+
+    def send_heartbeat(self):
+        mav.mav.heartbeat_send(
+            type=mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
+            autopilot=mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+            base_mode=0,
+            custom_mode=0,
+            system_status=mavutil.mavlink.MAV_STATE_ACTIVE
+        )

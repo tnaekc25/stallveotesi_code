@@ -1,6 +1,6 @@
 import os
 os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
-import cv2
+import cv2, time
 
 from pymavlink import mavutil
 from threading import Thread
@@ -30,18 +30,19 @@ class MavCom:
         self.battery_volt = 0
         self.battery_per = 0
 
+        self.last_heartbeat = -1
+        self.start_time = time.time()
+        self.connected = False
+
         self.boxes = []
 
 
     def connect(self, ip, port1, port2):
-
-        if (self.mav_out and self.mav_in):
-            self.close()
-
         self.mav_in = mavutil.mavlink_connection(f'udpin:0.0.0.0:{port1}')
         self.mav_out = mavutil.mavlink_connection(f'udpout:{ip}:{port2}')
 
-        print(">>> Sending Heartbeat...")
+        print(">>> Created mavlink connection...")
+
         self.mav_out.mav.heartbeat_send(
                 type=mavutil.mavlink.MAV_TYPE_GCS,
                 autopilot=mavutil.mavlink.MAV_AUTOPILOT_INVALID,
@@ -50,12 +51,32 @@ class MavCom:
                 system_status=mavutil.mavlink.MAV_STATE_ACTIVE
             )
 
-        print("Sent!")
+        print(">>> Heartbeat Sent...")
 
 
     def close(self):
+
+        self.connected = False
+        self.last_heartbeat = -1
+
         self.mav_in.close()
         self.mav_out.close()
+
+        print(">>> Mavlink connection closed...")
+
+
+    def check_connection(self):
+
+        if (self.last_heartbeat < 0):
+            return
+
+        elif (time.time() - self.last_heartbeat > 10):
+            print(">>> CONNECTION LOST for 10 SEC...")
+            self.close()
+
+        elif (time.time() - self.last_heartbeat > 5):
+            print(">>> CONNECTION LOST for 5 SEC...")
+            
 
 
     def recv_message(self):
@@ -66,8 +87,15 @@ class MavCom:
     
         msg_type = msg.get_type()
     
+        if msg_type == "HEARTBEAT":
+            self.last_heartbeat = time.time()
+            self.connected = True
+            print(f">>> HEARTBEAT RECV AT {self.last_heartbeat-self.start_time}")
+
+            return 1
+
         # Attitude
-        if msg_type == "ATTITUDE":
+        elif msg_type == "ATTITUDE":
             self.attitude = (msg.roll, msg.pitch, msg.yaw)
             return 1
     
@@ -108,15 +136,12 @@ class MavCom:
 
 
     def send_button(self, i):
-        if (self.mav_out):
+        if (self.connected):
             self.mav_out.mav.named_value_int_send(
                 int(i*10),
                 b"button_data",
                 i
             )
-
-        else:
-            print("ERROR! CONNECT FIRST...")
 
     def draw_rect(self, img):
         if (self.boxes):
@@ -124,6 +149,7 @@ class MavCom:
             self.boxes.pop()
             cls, x1, y1, x2, y2 = box
             cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255 if cls else 0, 0 if cls else 255), 2)
+        
 
 
 
