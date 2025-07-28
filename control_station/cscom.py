@@ -59,8 +59,10 @@ class MavCom:
         self.connected = False
         self.last_heartbeat = -1
 
-        self.mav_in.close()
-        self.mav_out.close()
+        if (self.mav_in):
+            self.mav_in.close()
+        if (self.mav_out):
+            self.mav_out.close()
 
         print(">>> Mavlink connection closed...")
 

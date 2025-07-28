@@ -150,7 +150,7 @@ class BottomWidget(ImageWidget):
 
         self.bt24 = StyledButton2(self, "MAV", self)
         self.bt24.setFactors(0.026, 0.045, 0.3, 0.075)
-        self.bt24.clicked.connect(lambda : com.connect(IP, PORT1, PORT2))
+        self.bt24.clicked.connect(lambda : (com.close(), com.connect(IP, PORT1, PORT2)))
         self.children.append(self.bt24)
 
         self.bt25 = StyledButton2(self, "GST", self)
@@ -312,7 +312,7 @@ def update_com():
             else:
                 time.sleep(1)
         except Exception as e:
-            print("ERROR AT RECV", e)
+            print("ERROR AT MAVLINK", e)
             if (com.mav_in and com.mav_out):
                 com.close()
             time.sleep(1)
