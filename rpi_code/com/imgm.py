@@ -52,7 +52,8 @@ class RecvClass:
 		return frame if ret else None
 
 	def close(self):
-		self.cap.release()
+		if (self.cap):
+			self.cap.release()
 		self.is_open = False
 
 	def start(self):
@@ -89,7 +90,8 @@ class SendClass:
 		self.out.write(img)
 
 	def close(self):
-		self.out.release()
+		if (self.out):
+			self.out.release()
 		self.is_open = False
 
 	def start(self):

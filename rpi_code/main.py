@@ -10,39 +10,10 @@ from sim.envr import EnvironmentModel
 
 from util.log import Log
 from util.telem_log import TelemLog
+from const import *
 
 import RPi.GPIO as GPIO
 
-# DELAY CONST
-
-DET_WAIT = 0.1
-MAIN_WAIT = 0.1
-SEND_WAIT = 0.1
-IMG_WAIT = 0
-RECV_WAIT = 0
-LOG_WAIT = 1
-
-ERROR_WAIT = 0.1
-
-FAILSAFE_DELAY = 1.5
-
-
-# NETWORK CONST
-
-IP = "192.168.0.101"
-MSIP = "10.58.7.165"
-PORTS = (14550, 14551, 31313) # send recv mp
-
-
-# SERVO CONST #
-
-MIN_PWM = 2.478
-NET_PWM = 7.11
-MAX_PWM = 12.874
-MDELAY = 1
-SERVO_PIN = 12
-
-SIGNAL_TRESHOLD = 10
 
 
 #############################
@@ -64,6 +35,9 @@ telem_logger = TelemLog("telem_log.txt")
 
 #############################
 
+is_img_testing = 0
+is_telem_testing = 0
+
 telemetry_data = {}
 gcs_data = {}
 box_data = []
@@ -74,22 +48,13 @@ is_det = False
 
 loggr = Log()
 
-loggr.print("Starting Pixhawk Connection...", 3)
-pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
-loggr.print("Success!\n", 1)
-
-loggr.print("Starting GCS Connection...", 3)
-mav_com = MavConnect(pixhawk)
-loggr.print("Success!\n", 1)
-
-loggr.print("Starting GPIO...", 3)
-GPIO.setmode(GPIO.BOARD)
-GPIO.setup(SERVO_PIN, GPIO.OUT)
-p = GPIO.PWM(SERVO_PIN, 50)
-loggr.print("Success!\n", 1)
-
 read_check = [0, 0, 0, 0]
 signal_lost = False
+
+#############################
+
+
+
 
 ## APPLY OBJECT DETECTION AND RUN SIMULATION
 def detect_and_fire():
@@ -143,7 +108,6 @@ def read_send_img():
             if (img_recv.is_open and img_send.is_open):
                 img_feed = img_recv.recv()
                 if (img_feed is not None):
-                    print("sendimg")
                     img_send.send(img_feed)
                     read_check[3] += 1
 
@@ -351,59 +315,147 @@ def write_telem():
 
 
 
+
+
+
 if __name__ == "__main__":
+
+    #CHECK ARGUMENTS
 
     if len(sys.argv) == 2:
         MSIP = IP = sys.argv[1]
 
-    elif len(sys.argv) == 3:
+    if len(sys.argv) > 2:
         IP = sys.argv[1]
         MSIP = sys.argv[2]
 
+    if len(sys.argv) > 3:
+        is_telem_testing = int(sys.argv[3])
+
+    if len(sys.argv) > 4:
+        is_img_testing = int(sys.argv[4])
+
+
+    #>>># START PROCESS
 
     loggr.print(f"Process Starting on GCS: {IP} - MSIP : {MSIP}...", 3, "\n\n")
 
-    loggr.print("Opening Camera Stream...", 3)
-    try:
-        if (img_recv.start()):
-            loggr.print("Success!\n", 1)
-        else:
-            loggr.print("Fail!\n", 2)
-    except:
-        loggr.print("Fail!\n", 2)
 
 
-    loggr.print("Starting Gstreamer...", 3)
+    loggr.print("Starting Pixhawk Connection...", 3)
+    pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
+    loggr.print("Success!\n", 1)
+    
+
+
+    loggr.print("Starting GCS Connection...", 3)
+    mav_com = MavConnect(pixhawk)
+    loggr.print("Success!\n", 1)
+    
+
+
+    loggr.print("Starting GPIO...", 3)
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setup(SERVO_PIN, GPIO.OUT)
+    p = GPIO.PWM(SERVO_PIN, 50)
+    loggr.print("Success!\n", 1)
+
+
+
     try:
-        if (img_send.start()):
-            loggr.print("Success!\n", 1)
-        else:
-            loggr.print("Fail!\n", 2)
+        for x in range(ERROR_TRY_COUNT):
+            loggr.print("Opening Camera Stream... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+
+            if (img_recv.start()):
+                loggr.print("Success!\n", 1)
+                break
+            else:
+                loggr.print("Fail!\n", 2)
+                img_recv.close()
     except:
         loggr.print("Fail!\n", 2)
+        img_recv.close()
+
+
+
+    try:
+        for x in range(ERROR_TRY_COUNT):
+            loggr.print("Starting Gstreamer... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+
+            if (img_send.start()):
+                loggr.print("Success!\n", 1)
+                break
+            else:
+                loggr.print("Fail!\n", 2)
+                img_send.close()
+    except:
+        loggr.print("Fail!\n", 2)
+        img_send.close()
+
+
 
     loggr.print("Waiting for Pixhawk Hearbeat...", 3)
     pixhawk.wait_heartbeat()
     loggr.print("Success!\n", 1)
 
-    loggr.print("Connecting GCS and Mission Planner...", 3)
-    mav_com.connect_gcs(IP, *(PORTS[0:2]))
-    mav_com.connect_sock(MSIP, PORTS[2])
-    loggr.print("Success!\n", 1)
-
-    loggr.print("Starting Servo GPIO...", 3)
-    p.start(NET_PWM)
-    loggr.print("Success!\n", 1)
 
 
-    #Thread(target=save_img, daemon=True).start()
+    try:
+        for x in range(ERROR_TRY_COUNT):
+            loggr.print("Connecting GCS... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+            mav_com.connect_gcs(IP, *(PORTS[0:2]))
+            loggr.print("Success!\n", 1)
+            break
+    except:
+        loggr.print("Fail!\n", 2)
+        mav_com.close_gcs()
 
-    #Thread(target=read_send_img, daemon=True).start()
-    #Thread(target=detect_and_fire, daemon=True).start()
+
+
+    try:
+        for x in range(ERROR_TRY_COUNT):
+            loggr.print("Connecting Mission Planner... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+            mav_com.connect_sock(MSIP, PORTS[2])
+            loggr.print("Success!\n", 1)
+            break
+    except:
+        loggr.print("Fail!\n", 2)
+        mav_com.close_sock()
+
+
+
+    try:
+        for x in range(ERROR_TRY_COUNT):
+            loggr.print("Starting Servo GPIO... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+            p.start(NET_PWM)
+            loggr.print("Success!\n", 1)
+            break
+    except:
+        loggr.print("Fail!\n", 2)
+
+
+
+    if (is_img_testing):
+        Thread(target=save_img, daemon=True).start()
+    else:
+        Thread(target=read_send_img, daemon=True).start()
+
+    if (is_telem_testing):
+        Thread(target=write_telem, daemon=True).start()
+    else:
+        Thread(target=detect_and_fire, daemon=True).start()
+
     Thread(target=send_data, daemon=True).start()
     Thread(target=read_data, daemon=True).start()
     Thread(target=log, daemon=True).start()
     mainloop()
 
+    
+    #|||# HALT PROCESS
+    mav_com.close_sock()
+    mav_com.close_gcs()
+    img_recv.close()
+    img_send.close()
+    pixhawk.close()
     p.stop()
     GPIO.cleanup()
