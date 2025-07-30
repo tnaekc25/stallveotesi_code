@@ -303,21 +303,29 @@ def mainloop():
                 p.ChangeDutyCycle(MIN_PWM) 
                 firing = False
 
+            elif (blst[-1].value == 1):
+                loggr.print("ARM TOGGLE", 0)
+                mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))
+
+            elif (blst[-1].value == 2):
+                is_det = False if is_det else True
+                loggr.print("DETECTION TOGGLE: " + is_det, 0)
+
             elif (blst[-1].value == 3 and firing == False):
                 firing = True
                 loggr.print("ACTIVATE 2", 0)
                 p.ChangeDutyCycle(MAX_PWM)
                 firing = False
 
+            elif (blst[-1].value == 4)
+                loggr.print("TOGGLE CONTROL", 0)
+                mav_com.toggle_control(telemetry_data.get("HEARTBEAT"))
+
             elif (blst[-1].value == 5 and firing == False):
                 firing = True
                 loggr.print("DE-ACTIVATE", 0)
                 p.ChangeDutyCycle(NET_PWM)
                 firing = False
-
-            elif (blst[-1].value == 2):
-                is_det = False if is_det else True
-                loggr.print("DETECTION TOGGLE: " + is_det, 0)
 
             blst.pop()
 

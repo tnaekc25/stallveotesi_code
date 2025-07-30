@@ -38,12 +38,18 @@ class MavConnect:
 
 
     def close_gcs(self):
-        self.gcs_out.close()
-        self.gcs_in.close()
+        if (self.gcs_out):
+            self.gcs_out.close()
+
+        if (self.gcs_in):
+            self.gcs_in.close()
+
         self.mav_connected = False
 
     def close_sock(self):
-        self.sock.close()
+        if (self.sock):
+            self.sock.close()
+        
         self.sock_connected = False
 
 
@@ -92,10 +98,56 @@ class MavConnect:
 
 
     def send_heartbeat(self):
-        mav.mav.heartbeat_send(
+        self.gcs_out.mav.heartbeat_send(
             type=mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
             autopilot=mavutil.mavlink.MAV_AUTOPILOT_INVALID,
             base_mode=0,
             custom_mode=0,
             system_status=mavutil.mavlink.MAV_STATE_ACTIVE
+        )
+
+
+
+    def is_armed(self, heartbeat):
+        if heartbeat:
+            return (heartbeat.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED) != 0
+        return False
+
+    def is_auto(self, heartbeat):
+        if heartbeat and hasattr(self.pixhawk, 'mode_mapping'):
+            mode_map = self.pixhawk.mode_mapping()
+            reversed_map = {v: k for k, v in mode_map.items()}
+            current_mode_name = reversed_map.get(heartbeat.custom_mode, 'UNKNOWN')
+            return current_mode_name == 'AUTO'
+        return False
+
+
+    def toggle_arm(self, heartbeat):
+        if (heartbeat == False):
+            return
+
+        self.pixhawk.mav.command_long_send(
+            self.pixhawk.target_system,
+            self.pixhawk.target_component,
+            mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+            0,
+            (not self.is_armed(heartbeat)),
+            0, 0, 0, 0, 0, 0)
+
+
+    def toggle_control(self, heartbeat):
+
+        if ((not heartbeat) or (not hasattr(self.pixhawk, 'mode_mapping'))):
+            return
+
+        mode_map = self.pixhawk.mode_mapping()
+        mode_id = mode_map.get('AUTO' if self.is_auto(heartbeat) else 'MANUAL')
+
+        if (not mode_id):
+            return
+
+        self.pixhawk.mav.set_mode_send(
+            self.pixhawk.target_system,
+            mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            mode_id
         )
