@@ -1,6 +1,6 @@
 ## Overview
 
-It is the on-board software and ground control system for an autonomous drone. The system's primary function is to autonomously detect and engage targets, while providing a robust, real-time interface for human operators.
+It is the on-board software and ground control system for an autonomous UAV. The system's primary function is to autonomously detect and engage targets, while providing a robust, real-time interface for human operators.
 
 The architecture is built for reliability and real-time performance, utilizing a multi-threaded approach on a Raspberry Pi to handle concurrent tasks such as MAVLink communication, specialized night vision video processing, and hardware control. A dedicated Ground Control Station (GCS) application provides a comprehensive user interface for monitoring and control.
 
@@ -9,7 +9,7 @@ The architecture is built for reliability and real-time performance, utilizing a
 The project is divided into two main components:
 
 - **On-Board Software (`/rpi_code`)**:  
-  The core Python application that runs on a Raspberry Pi connected to the drone's hardware. It handles all sensor input, communication, and control logic.
+  The core Python application that runs on a Raspberry Pi connected to the UAV's hardware. It handles all sensor input, communication, and control logic.
 
 - **Ground Control Station (`/control_station`)**:  
   A PyQt6-based desktop application that runs on a separate computer. It provides a visual and interactive interface for the operator.
