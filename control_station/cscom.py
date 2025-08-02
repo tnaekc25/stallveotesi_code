@@ -71,6 +71,9 @@ class MavCom:
         if (self.mav_out):
             self.mav_out.close()
 
+        self.mav_in = None
+        self.mav_out = None
+
         print(">>> Mavlink connection closed...")
 
 
@@ -79,12 +82,12 @@ class MavCom:
         if (self.last_heartbeat < 0):
             return
 
-        elif (time.time() - self.last_heartbeat > 10):
-            print(">>> CONNECTION LOST for 10 SEC...")
+        elif (time.time() - self.last_heartbeat > 5):
+            print(">>> CONNECTION LOST for 5 SEC, CLOSING...")
             self.close()
 
-        elif (time.time() - self.last_heartbeat > 5):
-            print(">>> CONNECTION LOST for 5 SEC...")
+        elif (time.time() - self.last_heartbeat > 3):
+            print(">>> CONNECTION LOST for 3 SEC...")
             
 
 
@@ -99,7 +102,7 @@ class MavCom:
         if msg_type == "HEARTBEAT":
             self.last_heartbeat = time.time()
             self.connected = True
-            print(f">>> HEARTBEAT RECV AT {self.last_heartbeat-self.start_time}")
+            #print(f">>> HEARTBEAT RECV AT {self.last_heartbeat-self.start_time}")
 
             return 1
 

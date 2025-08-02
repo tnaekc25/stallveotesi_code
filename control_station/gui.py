@@ -328,10 +328,23 @@ def update_com():
                 time.sleep(1)
         except Exception as e:
             print("ERROR AT MAVLINK", e)
+            time.sleep(1)
+
+def check_com():
+
+    global com
+
+    while True:
+        try:
+            if (com.mav_in and com.mav_out):
+                com.check_connection()
+            else:
+                time.sleep(1)
+        except Exception as e:
+            print("ERROR AT MAVLINK CHECK", e)
             if (com.mav_in and com.mav_out):
                 com.close()
             time.sleep(1)
-
 
 def update_img():
 
@@ -377,6 +390,8 @@ imgcom = None
 Thread(target = restart_gst).start()
 
 Thread(target = update_com).start()
+Thread(target = check_com).start()
+
 Thread(target = update_img).start()
 
 app = QApplication(sys.argv)
