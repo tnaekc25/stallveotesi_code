@@ -10,6 +10,7 @@ LOG_WAIT = 1
 ERROR_WAIT = 0.1
 
 FAILSAFE_DELAY = 1.5
+FAILSAFE_ACTIVE = False
 
 ############################################
 

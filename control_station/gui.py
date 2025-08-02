@@ -173,15 +173,15 @@ class BottomWidget(ImageWidget):
  Attitude (RPY):
  {:6}° {:6}° {:6}°    
 ───────────────────────
- Armed     | {}
- Battery   │ {:6}%   
- Voltage   │ {:6} V  
- Bomb Stat │ {}
+ Armed / Control / Payld:
+ {:4} / {:7} / {:6} 
+ ───────────────────────
+ Battery   │ {:3}% / {:4}V  
  ───────────────────────
  Throttle  | {:6}%
 """
 
-        self.telem = TelemBox(self, self.telem_text.format(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), self)
+        self.telem = TelemBox(self, self.telem_text.format(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), self)
         self.telem.setFactors(8, 0.1156, 0.1845, 0.5055, 0.152)
         self.children.append(self.telem)
 
@@ -258,8 +258,10 @@ class BottomWidget(ImageWidget):
 
         self.telem.setText(self.telem_text.format(*[format(x, ".4g") if type(x) != str else x for x in (
             com.airspeed, com.altitude, com.heading, 0,
-            roll*360, pitch*360, com.attitude[2] * (360 / (np.pi * 2)), "NO", com.battery_per,
-            com.battery_volt, "YES", com.cont_inputs[0])]))
+            roll*360, pitch*360, com.attitude[2] * (360 / (np.pi * 2)),
+            "YES" if com.is_armed else "NO", "MANUAL" if com.control_mode else "AUTO",
+            f"{'Y' if com.left_stat else 'N'} - {'Y' if com.right_stat else 'N'}",
+            com.battery_per, com.battery_volt , com.cont_inputs[0])]))
 
         self.image_comp.setImg(upimg)
         self.is_updating = False

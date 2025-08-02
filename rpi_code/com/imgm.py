@@ -9,9 +9,11 @@ from scipy.spatial.transform import Rotation
 
 class DetectClass:
 
-	def __init__(self, model_path, fx, fy, cx, cy):
+	def __init__(self, model_path, fx, fy, cx, cy, default_pitch):
 		self.model = YOLO(model_path)
 		self.fx, self.fy, self.cx, self.cy = fx, fy, cx, cy
+		self.default_pitch = default_pitch
+
 		print("Model is ready...")
 
 	def get_boxes(self, img):
@@ -23,7 +25,7 @@ class DetectClass:
 		Y = (y - self.cy) / self.fy
 		
 		r_cam = np.array([X, Y, 1.0])
-		r = Rotation.from_euler('xyz', [roll, pitch, 0], degrees=True)
+		r = Rotation.from_euler('xyz', [roll, pitch + self.default_pitch, 0], degrees=True)
 		r_world = r.inv().apply(r_cam)
 
 		t = h / r_world[2]

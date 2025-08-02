@@ -30,6 +30,13 @@ class MavCom:
         self.battery_volt = 0
         self.battery_per = 0
 
+
+        self.is_armed = 0
+        self.control_mode = 0
+        self.left_stat = 0
+        self.right_stat = 0
+
+
         self.last_heartbeat = -1
         self.start_time = time.time()
         self.connected = False
@@ -132,7 +139,16 @@ class MavCom:
 
             if len(recvd) > 6:
                 if recvd[0:6] == "BOXINF":
-                    self.boxes.append(tuple(map(int, recvd[1:-1].split(','))))
+                    self.boxes.append(tuple(map(int, recvd[7:-1].split(','))))
+
+                elif len(recvd) > 7:
+                    if recvd[0:7] == "STATINF":
+                        spltted = list(recvd[7:])
+                        if (len(spltted) == 4):
+                            self.is_armed = spltted[0] == '1'
+                            self.control_mode = spltted[1] == '1'
+                            self.left_stat = spltted[2] == '1'
+                            self.right_stat = spltted[3] == '1'
 
             return 1
 

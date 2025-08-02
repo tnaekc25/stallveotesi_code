@@ -1,6 +1,6 @@
 from pymavlink import mavutil
-import time, select, socket, numpy as np, sys
-from threading import Thread
+import time, select, numpy as np, sys
+from threading import Thread, Lock
 from com.mav import MavConnect
 from com.imgm import RecvClass, SendClass, DetectClass, VideoSave
 
@@ -15,24 +15,6 @@ from const import *
 import RPi.GPIO as GPIO
 
 
-
-#############################
-
-img_det = DetectClass("model.pt", 1071, 1071, 320, 240)
-img_recv = RecvClass()
-img_send = SendClass(IP, 5000)
-
-#m/s^2, kg/m^3 -> by meter
-envr = EnvironmentModel(grav = 9.81, ro_path = "", wind_path = "") 
-#kg, kg.m^2, m, m^2, coef of drag -> by velocity
-rocket = RocketModel(mass = 241, carea = 0.06, cd_path = "") 
-sim = RocketSimulation(dt = 0.1, rocket = rocket, envr = envr)
-
-
-#video = VideoSave()
-telem_logger = TelemLog("telem_log.txt")
-
-
 #############################
 
 is_img_testing = 0
@@ -43,7 +25,6 @@ gcs_data = {}
 box_data = []
 
 img_feed = None
-firing = False
 is_det = False
 
 loggr = Log()
@@ -53,13 +34,16 @@ signal_lost = False
 
 #############################
 
+firing_lock = Lock()
+can_fire = [1, 1]
 
+#############################
 
 
 ## APPLY OBJECT DETECTION AND RUN SIMULATION
 def detect_and_fire():
 
-    global box_data, telemetry_data, firing
+    global box_data, telemetry_data, can_fire, p
 
     while True:
         try:
@@ -73,7 +57,7 @@ def detect_and_fire():
                     ned = telemetry_data.get("LOCAL_POSITION_NED")
                     hud = telemetry_data.get("VFR_HUD")
         
-                    if (0 and ned and hud):
+                    if (ned and hud):
 
                         # CALCULATE REAL LIFE DISTANCE
                         detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
@@ -84,11 +68,16 @@ def detect_and_fire():
 
                         cls = box[0]
 
-                        if (abs(detx-x) < 2 and abs(dety-y) < 2 and firing == False):
-                            firing = True
-                            loggr.print("AUTO ACTIVATE MECHANISM", 3)
-                            p.ChangeDutyCycle(MAX_PWM if cls else MIN_PWM)
-                            firing = False
+                        with firing_lock:
+                            if (abs(detx-x) < 2 and abs(dety-y) < 2):
+                                loggr.print("AUTO ACTIVATE MECHANISM", 3)
+                                p.ChangeDutyCycle(MIN_PWM if cls else MAX_PWM)
+
+                                if (cls):
+                                    can_fire[0] = 0
+                                else:
+                                    can_fire[1] = 0
+
 
             time.sleep(DET_WAIT)
         
@@ -182,6 +171,16 @@ def send_data():
                     if (msg) and not msg.get_type().startswith("UNKNOWN_"):
                         mav_com.send_gcs(msg)
 
+                        mav_com.gcs_out.mav.statustext_send(
+                            severity=6,
+                            text=("STATINF"
+                                + ('1' if com.is_armed else '0')
+                                + ('1' if (com.control_mode == 'MANUAL') else '0')
+                                + ('1' if can_fire[0] else '0')
+                                + ('1' if can_fire[1] else '0')
+                                ).encode('utf-8')
+                        )
+
             # SEND BOXES
             for box in box_data:
                 mav_com.send_box(box)
@@ -225,66 +224,70 @@ def log():
 # PROCESS DATA
 def mainloop():
 
-    global gcs_data, is_det, firing, telemetry_data, signal_lost
+    global gcs_data, is_det, telemetry_data, signal_lost, can_fire, p
 
     lost_start = -1
 
     while True:
 
-        """# FAILSAFE
-        if telemetry_data.get("RC_CHANNELS") and telemetry_data.get("RC_CHANNELS").rssi < SIGNAL_TRESHOLD:
-            if (lost_start >= 0 and time.time() - lost_start > FAILSAFE_DELAY):
-                #mav_com.send_fail()
-                loggr.print(" >>> FAIL SAFE <<< ", 2)            
-            else:
-                signal_lost = True
-                lost_start = time.time()
-        
-        elif signal_lost:
-            signal_lost = False
-            lost_start = -1"""
+        # FAILSAFE
+
+        if (FAILSAFE_ACTIVE):
+            if telemetry_data.get("RC_CHANNELS") and telemetry_data.get("RC_CHANNELS").rssi < SIGNAL_TRESHOLD:
+                if (lost_start >= 0 and time.time() - lost_start > FAILSAFE_DELAY):
+                    #mav_com.send_fail()
+                    loggr.print(" >>> FAIL SAFE <<< ", 2)            
+                else:
+                    signal_lost = True
+                    lost_start = time.time()
+            
+            elif signal_lost:
+                signal_lost = False
+                lost_start = -1
 
 
         # PROCESS GCS DATA
         blst = gcs_data.get("NAMED_VALUE_INT")
         if (blst):
-            if (blst[-1].value == 0 and firing == False):
-                firing = True
-                loggr.print("ACTIVATE 1", 0)
-                p.ChangeDutyCycle(MIN_PWM) 
-                firing = False
+            if (blst[0].value == 0):
+                with firing_lock:
+                    loggr.print("ACTIVATE 1", 0)
+                    p.ChangeDutyCycle(MIN_PWM) 
+                    can_fire[0] = 0
 
-            elif (blst[-1].value == 1):
-                loggr.print("ARM TOGGLE", 0)
+            elif (blst[0].value == 1):
                 mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))
+                loggr.print("ARM TOGGLE TO: " + str(mav_com.is_armed), 0)
 
-            elif (blst[-1].value == 2):
+            elif (blst[0].value == 2):
                 is_det = False if is_det else True
-                loggr.print("DETECTION TOGGLE: " + is_det, 0)
+                loggr.print("TOGGLE DETECTION TO: " + str(is_det), 0)
 
-            elif (blst[-1].value == 3 and firing == False):
-                firing = True
-                loggr.print("ACTIVATE 2", 0)
-                p.ChangeDutyCycle(MAX_PWM)
-                firing = False
+            elif (blst[0].value == 3):
+                with firing_lock:
+                    p.ChangeDutyCycle(MAX_PWM)
+                    loggr.print("ACTIVATE 2", 0)
+                    can_fire[1] = 0
 
-            elif (blst[-1].value == 4):
-                loggr.print("TOGGLE CONTROL", 0)
+            elif (blst[0].value == 4):
                 mav_com.toggle_control(telemetry_data.get("HEARTBEAT"))
+                loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
 
-            elif (blst[-1].value == 5 and firing == False):
-                firing = True
-                loggr.print("DE-ACTIVATE", 0)
-                p.ChangeDutyCycle(NET_PWM)
-                firing = False
+            elif (blst[0].value == 5):
+                with firing_lock:
+                    p.ChangeDutyCycle(NET_PWM)
+                    loggr.print("DE-ACTIVATE", 0)
 
-            blst.pop()
+            blst.pop(0)
 
         time.sleep(MAIN_WAIT)
 
 
 
-"""def save_img():
+
+
+
+def save_img():
     global img_feed
 
     while True:
@@ -295,7 +298,7 @@ def mainloop():
             time.sleep(0.05)
 
         except Exception as e:
-            loggr.print("ERROR AT SAVE 1 " + str(e), 2)"""   
+            loggr.print("ERROR AT SAVE 1 " + str(e), 2)   
 
 
 
@@ -318,144 +321,192 @@ def write_telem():
 
 
 
-if __name__ == "__main__":
 
-    #CHECK ARGUMENTS
-
-    if len(sys.argv) == 2:
-        MSIP = IP = sys.argv[1]
-
-    if len(sys.argv) > 2:
-        IP = sys.argv[1]
-        MSIP = sys.argv[2]
-
-    if len(sys.argv) > 3:
-        is_telem_testing = int(sys.argv[3])
-
-    if len(sys.argv) > 4:
-        is_img_testing = int(sys.argv[4])
-
-
-    #>>># START PROCESS
-
-    loggr.print(f"Process Starting on GCS: {IP} - MSIP : {MSIP}...", 3, "\n\n")
-
-
-
-    loggr.print("Starting Pixhawk Connection...", 3)
-    pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
-    loggr.print("Success!\n", 1)
+try:
+    if __name__ == "__main__":
     
-
-
-    loggr.print("Starting GCS Connection...", 3)
-    mav_com = MavConnect(pixhawk)
-    loggr.print("Success!\n", 1)
+        #CHECK ARGUMENTS
     
-
-
-    loggr.print("Starting GPIO...", 3)
-    GPIO.setmode(GPIO.BOARD)
-    GPIO.setup(SERVO_PIN, GPIO.OUT)
-    p = GPIO.PWM(SERVO_PIN, 50)
-    loggr.print("Success!\n", 1)
-
-
-
-    try:
-        for x in range(ERROR_TRY_COUNT):
-            loggr.print("Opening Camera Stream... [{}]".format((ERROR_TRY_COUNT-x)), 3)
-
-            if (img_recv.start()):
+        if len(sys.argv) == 2:
+            MSIP = IP = sys.argv[1]
+    
+        if len(sys.argv) > 2:
+            IP = sys.argv[1]
+            MSIP = sys.argv[2]
+    
+        if len(sys.argv) > 3:
+            is_telem_testing = int(sys.argv[3])
+    
+        if len(sys.argv) > 4:
+            is_img_testing = int(sys.argv[4])
+    
+    
+        #>>># START PROCESS
+    
+        loggr.print(f"Process Starting on GCS: {IP} - MSIP : {MSIP}...", 3, "\n\n")
+    
+    
+        ################## START CRITICAL COMPONENTS ##################
+    
+        ################## START PIXHAWK CONNECTION ##################
+        loggr.print("Starting Pixhawk Connection...", 3)
+        pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
+        loggr.print("Success!\n", 1)
+    
+        loggr.print("Waiting for Pixhawk Hearbeat...", 3)
+        pixhawk.wait_heartbeat()
+        loggr.print("Success!\n", 1)
+    
+        ################## IMAGE CLASSES ##################
+        loggr.print("Starting Detection Model...", 3)
+        img_det = DetectClass("model.pt", 1071, 1071, 320, 240)
+        loggr.print("Success!\n", 1)
+    
+        loggr.print("Starting Camera Reader Class...", 3)
+        img_recv = RecvClass()
+        loggr.print("Success!\n", 1)
+    
+        loggr.print("Starting Image Sender Class...", 3)
+        img_send = SendClass(IP, 5000)
+        loggr.print("Success!\n", 1)
+        
+    
+        ################## SIMULATION MODEL ##################
+        loggr.print("Starting Simulation Model...", 3)
+        #m/s^2, kg/m^3 -> by meter
+        envr = EnvironmentModel(grav = 9.81, ro_path = "", wind_path = "") 
+        #kg, kg.m^2, m, m^2, coef of drag -> by velocity
+        rocket = RocketModel(mass = 241, carea = 0.06, cd_path = "") 
+        sim = RocketSimulation(dt = 0.1, rocket = rocket, envr = envr)
+        loggr.print("Success!\n", 1)
+        
+    
+    
+        ################## MAVLINK CLASS ##################
+        loggr.print("Starting GCS Connection...", 3)
+        mav_com = MavConnect(pixhawk)
+        loggr.print("Success!\n", 1)
+        
+    
+        ################## START GPIO ##################
+        loggr.print("Starting GPIO...", 3)
+        GPIO.setmode(GPIO.BOARD)
+        GPIO.setup(SERVO_PIN, GPIO.OUT)
+        p = GPIO.PWM(SERVO_PIN, 50)
+        loggr.print("Success!\n", 1)
+    
+    
+        ####################################################
+    
+        try:
+            for x in range(ERROR_TRY_COUNT):
+                loggr.print("Opening Camera Stream... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+    
+                if (img_recv.start()):
+                    loggr.print("Success!\n", 1)
+                    break
+                else:
+                    loggr.print("Fail!\n", 2)
+                    img_recv.close()
+        except:
+            loggr.print("Fail!\n", 2)
+            img_recv.close()
+    
+    
+    
+        try:
+            for x in range(ERROR_TRY_COUNT):
+                loggr.print("Starting Gstreamer... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+    
+                if (img_send.start()):
+                    loggr.print("Success!\n", 1)
+                    break
+                else:
+                    loggr.print("Fail!\n", 2)
+                    img_send.close()
+        except:
+            loggr.print("Fail!\n", 2)
+            img_send.close()
+    
+    
+    
+        try:
+            for x in range(ERROR_TRY_COUNT):
+                loggr.print("Connecting GCS... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+                mav_com.connect_gcs(IP, *(PORTS[0:2]))
                 loggr.print("Success!\n", 1)
                 break
-            else:
-                loggr.print("Fail!\n", 2)
-                img_recv.close()
-    except:
-        loggr.print("Fail!\n", 2)
-        img_recv.close()
-
-
-
-    try:
-        for x in range(ERROR_TRY_COUNT):
-            loggr.print("Starting Gstreamer... [{}]".format((ERROR_TRY_COUNT-x)), 3)
-
-            if (img_send.start()):
+        except:
+            loggr.print("Fail!\n", 2)
+            mav_com.close_gcs()
+    
+    
+    
+        try:
+            for x in range(ERROR_TRY_COUNT):
+                loggr.print("Connecting Mission Planner... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+                mav_com.connect_sock(MSIP, PORTS[2])
                 loggr.print("Success!\n", 1)
                 break
-            else:
-                loggr.print("Fail!\n", 2)
-                img_send.close()
-    except:
-        loggr.print("Fail!\n", 2)
-        img_send.close()
+        except:
+            loggr.print("Fail!\n", 2)
+            mav_com.close_sock()
+    
+    
+    
+        try:
+            for x in range(ERROR_TRY_COUNT):
+                loggr.print("Starting Servo GPIO... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+                p.start(NET_PWM)
+                loggr.print("Success!\n", 1)
+                break
+        except:
+            loggr.print("Fail!\n", 2)
+    
+    
+        if (is_img_testing):
+            loggr.print("Starting with Local Image Save...", 3)
+            video = VideoSave()
+            Thread(target=save_img, daemon=True).start()
+        else:
+            Thread(target=read_send_img, daemon=True).start()
+    
+        if (is_telem_testing):
+            loggr.print("Starting with Local Telemetry Logging...", 3)
+            telem_logger = TelemLog("telem_log.txt")
+            Thread(target=write_telem, daemon=True).start()
+        else:
+            Thread(target=detect_and_fire, daemon=True).start()
+    
+        Thread(target=send_data, daemon=True).start()
+        Thread(target=read_data, daemon=True).start()
+        Thread(target=log, daemon=True).start()
+    
+        while True:
+            try:
+                mainloop()
+                break
+            except Exception as e:
+                loggr.print("EXCEPTION AT MAINLOOP: " + str(e), 2)
+                time.sleep(ERROR_WAIT)
 
-
-
-    loggr.print("Waiting for Pixhawk Hearbeat...", 3)
-    pixhawk.wait_heartbeat()
-    loggr.print("Success!\n", 1)
-
-
-
-    try:
-        for x in range(ERROR_TRY_COUNT):
-            loggr.print("Connecting GCS... [{}]".format((ERROR_TRY_COUNT-x)), 3)
-            mav_com.connect_gcs(IP, *(PORTS[0:2]))
-            loggr.print("Success!\n", 1)
-            break
-    except:
-        loggr.print("Fail!\n", 2)
+finally:
+    #|||# HALT PROCESS
+    if (mav_com):
+        mav_com.close_sock()
         mav_com.close_gcs()
 
+    if (img_recv):
+        img_recv.close()
 
+    if (img_send):
+        img_send.close()
 
-    try:
-        for x in range(ERROR_TRY_COUNT):
-            loggr.print("Connecting Mission Planner... [{}]".format((ERROR_TRY_COUNT-x)), 3)
-            mav_com.connect_sock(MSIP, PORTS[2])
-            loggr.print("Success!\n", 1)
-            break
-    except:
-        loggr.print("Fail!\n", 2)
-        mav_com.close_sock()
+    if (pixhawk):
+        pixhawk.close()
 
-
-
-    try:
-        for x in range(ERROR_TRY_COUNT):
-            loggr.print("Starting Servo GPIO... [{}]".format((ERROR_TRY_COUNT-x)), 3)
-            p.start(NET_PWM)
-            loggr.print("Success!\n", 1)
-            break
-    except:
-        loggr.print("Fail!\n", 2)
-
-
-
-    if (is_img_testing):
-        Thread(target=save_img, daemon=True).start()
-    else:
-        Thread(target=read_send_img, daemon=True).start()
-
-    if (is_telem_testing):
-        Thread(target=write_telem, daemon=True).start()
-    else:
-        Thread(target=detect_and_fire, daemon=True).start()
-
-    Thread(target=send_data, daemon=True).start()
-    Thread(target=read_data, daemon=True).start()
-    Thread(target=log, daemon=True).start()
-    mainloop()
-
+    if (p):
+        p.stop()
     
-    #|||# HALT PROCESS
-    mav_com.close_sock()
-    mav_com.close_gcs()
-    img_recv.close()
-    img_send.close()
-    pixhawk.close()
-    p.stop()
     GPIO.cleanup()
+    break

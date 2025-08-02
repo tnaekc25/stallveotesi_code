@@ -21,6 +21,9 @@ class MavConnect:
 
         self.testing = False
 
+        self.is_armed = None
+        self.control_mode = None
+
 
     def connect_gcs(self, ip, port1, port2):
 
@@ -78,11 +81,13 @@ class MavConnect:
     def get_gcs(self):
         return self.gcs_in.recv_match()
 
+
     def send_box(self, box):
         self.gcs_out.mav.statustext_send(
             severity=6,
             text=("BOXINF"+str(box)).encode('utf-8')
         )
+
 
     def send_fail(self):
         self.pixhawk.mav.rc_channels_override_send(
@@ -126,13 +131,17 @@ class MavConnect:
         if (heartbeat == False):
             return
 
+        self.is_armed = (not self.is_armed(heartbeat))
+
         self.pixhawk.mav.command_long_send(
             self.pixhawk.target_system,
             self.pixhawk.target_component,
             mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
             0,
-            (not self.is_armed(heartbeat)),
+            self.is_armed,
             0, 0, 0, 0, 0, 0)
+
+
 
 
     def toggle_control(self, heartbeat):
@@ -141,7 +150,9 @@ class MavConnect:
             return
 
         mode_map = self.pixhawk.mode_mapping()
-        mode_id = mode_map.get('AUTO' if self.is_auto(heartbeat) else 'MANUAL')
+        self.control_mode = 'AUTO' if self.is_auto(heartbeat) else 'MANUAL'
+
+        mode_id = mode_map.get(self.control_mode)
 
         if (not mode_id):
             return
