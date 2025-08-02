@@ -42,6 +42,7 @@ class ImageWidget(QWidget):
     def setImgbyName(self, img):
         if (img is not None):
             self.img = QPixmap(img)
+            self.name = img
         self.rescaleImage()
 
     def setFactors(self, wf, hf, offx, offy, intr = 0, rf = 1):

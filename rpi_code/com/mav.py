@@ -122,7 +122,7 @@ class MavConnect:
         if heartbeat and hasattr(self.pixhawk, 'mode_mapping'):
             mode_map = self.pixhawk.mode_mapping()
             reversed_map = {v: k for k, v in mode_map.items()}
-            current_mode_name = reversed_map.get(heartbeat.custom_mode, 'UNKNOWN')
+            current_mode_name = reversed_map.get(heartbeat.custom_mode) 
             return current_mode_name == 'AUTO'
         return False
 
@@ -150,8 +150,7 @@ class MavConnect:
             return
 
         mode_map = self.pixhawk.mode_mapping()
-        self.control_mode = 'AUTO' if self.is_auto(heartbeat) else 'MANUAL'
-
+        self.control_mode = 'MANUAL' if self.is_auto(heartbeat) else 'AUTO'
         mode_id = mode_map.get(self.control_mode)
 
         if (not mode_id):

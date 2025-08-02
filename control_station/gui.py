@@ -18,7 +18,7 @@ os.environ['QT_SCALE_FACTOR'] = '1'
 os.environ['QT_FONT_DPI'] = '0'
 
 upimg = None
-IP = "10.209.16.118" 
+IP = "10.239.207.118" 
 PORT1 = 14550 
 PORT2 = 14551
 
@@ -184,7 +184,7 @@ class BottomWidget(ImageWidget):
  Armed / Control / Payld:
  {:4} / {:7} / {:6} 
  ───────────────────────
- Battery   │ {:3}% / {:4}V  
+ Battery   │ {:3}% {:4}V  
  ───────────────────────
  Throttle  | {:6}%
 """

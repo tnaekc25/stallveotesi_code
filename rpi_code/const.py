@@ -18,7 +18,7 @@ FAILSAFE_ACTIVE = False
 
 ############## NETWORK CONST ###############
 
-IP = "192.168.0.101"
+IP = "10.239.207.165"
 MSIP = "10.58.7.165"
 PORTS = (14550, 14551, 31313) # send recv mp
 

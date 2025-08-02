@@ -174,8 +174,8 @@ def send_data():
                         mav_com.gcs_out.mav.statustext_send(
                             severity=6,
                             text=("STATINF"
-                                + ('1' if com.is_armed else '0')
-                                + ('1' if (com.control_mode == 'MANUAL') else '0')
+                                + ('1' if mav_com.is_armed else '0')
+                                + ('1' if (mav_com.control_mode == 'MANUAL') else '0')
                                 + ('1' if can_fire[0] else '0')
                                 + ('1' if can_fire[1] else '0')
                                 ).encode('utf-8')
@@ -270,8 +270,9 @@ def mainloop():
                     can_fire[1] = 0
 
             elif (blst[0].value == 4):
-                mav_com.toggle_control(telemetry_data.get("HEARTBEAT"))
                 loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
+                mav_com.toggle_control(telemetry_data.get("HEARTBEAT"))
+                
 
             elif (blst[0].value == 5):
                 with firing_lock:
@@ -359,7 +360,7 @@ try:
     
         ################## IMAGE CLASSES ##################
         loggr.print("Starting Detection Model...", 3)
-        img_det = DetectClass("model.pt", 1071, 1071, 320, 240)
+        img_det = DetectClass("model.pt", 1071, 1071, 320, 240, 0)
         loggr.print("Success!\n", 1)
     
         loggr.print("Starting Camera Reader Class...", 3)
@@ -509,4 +510,3 @@ finally:
         p.stop()
     
     GPIO.cleanup()
-    break
