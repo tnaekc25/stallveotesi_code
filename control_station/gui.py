@@ -29,13 +29,21 @@ class BottomWidget(ImageWidget):
         self.children = []
 
         # |||||||||||||||||||||| Images ||||||||||||||||||||||
-        self.gps_comp = MapWidget(self, 0, 0)
-        self.gps_comp.setFactors(0.15, 0.261, 0.2156, 0.3461)
-        self.children.append(self.gps_comp)
 
         self.image_comp = ImageWidget("src/test.png", self, self)
         self.image_comp.setFactors(0.15, 0.261, 0.7944, 0.3461)
         self.children.append(self.image_comp)
+
+        self.connected_img = ImageWidget("src/connected.png", self, self)
+        self.connected_img.setFactors(0.03897, 0.0673, 0.7118, 0.072)
+        self.children.append(self.connected_img)
+
+
+        # |||||||||||||||||||||| GPS ||||||||||||||||||||||
+
+        self.gps_comp = MapWidget(self, 0, 0)
+        self.gps_comp.setFactors(0.15, 0.261, 0.2156, 0.3461)
+        self.children.append(self.gps_comp)
 
         self.rot1 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.0005, self)
         self.rot1.setFactors(0.03125, 0.054, 0.310764, 0.51)
@@ -213,6 +221,11 @@ class BottomWidget(ImageWidget):
         if self.is_updating:
             return
         self.is_updating = True
+
+        if (com.connected and self.connected_img.name != ("src/connected.png")):
+            self.connected_img.setImgbyName("src/connected.png")
+        elif (not com.connected and self.connected_img.name != ("src/not_connected.png")):
+            self.connected_img.setImgbyName("src/not_connected.png")
 
         self.needle1.num2Rot(com.airspeed*100)
         self.speednum.setDigits(com.airspeed)

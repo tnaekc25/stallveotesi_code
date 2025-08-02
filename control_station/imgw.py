@@ -39,6 +39,11 @@ class ImageWidget(QWidget):
             self.img = self.cv2_to_qpixmap(img)
         self.rescaleImage()
 
+    def setImgbyName(self, img):
+        if (img is not None):
+            self.img = QPixmap(img)
+        self.rescaleImage()
+
     def setFactors(self, wf, hf, offx, offy, intr = 0, rf = 1):
         self._wf = wf 
         self._hf = hf
