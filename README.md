@@ -57,7 +57,7 @@ The GCS serves as the operator's primary interface for the entire mission. Its d
     Shows latitude, longitude, and altitude.
 
 - **System Status Indicators**  
-  Visual indicators (e.g., color-coded text or icons) show operational status of on-board systems:
+  Digital telemetry panel shows operational status of on-board systems:
   - Armed/Disarmed status  
   - Manual/Autonomous mode  
   - Detection status  
@@ -93,8 +93,8 @@ The system relies entirely on MAVLink for communication between the on-board sof
 
     [IS_IMG_TESTING]: (Optional) 1 to enable local video recording.
 
-    Run Ground Control Station (on operator PC):
-
+3. **Run Ground Control Station** (on operator PC):
+    ```bash
     python main_gcs.py
 
 Author
