@@ -3,7 +3,7 @@
 DET_WAIT = 0.1
 MAIN_WAIT = 0.1
 SEND_WAIT = 0.1
-IMG_WAIT = 0
+IMG_WAIT = 0.03
 RECV_WAIT = 0
 LOG_WAIT = 1
 
@@ -18,8 +18,8 @@ FAILSAFE_ACTIVE = False
 
 ############## NETWORK CONST ###############
 
-IP = "10.239.207.165"
-MSIP = "10.58.7.165"
+IP = ""
+MSIP = ""
 PORTS = (14550, 14551, 31313) # send recv mp
 
 ############################################

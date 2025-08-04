@@ -1,6 +1,6 @@
 from pymavlink import mavutil
-import time, select, numpy as np, sys
-from threading import Thread, Lock
+import time, select, numpy as np, sys, subprocess
+from threading import Thread, Lock, Event
 from com.mav import MavConnect
 from com.imgm import RecvClass, SendClass, DetectClass, VideoSave
 
@@ -15,10 +15,14 @@ from const import *
 import RPi.GPIO as GPIO
 
 
+
+
+stop_event = Event()
+
 #############################
 
-is_img_testing = 0
-is_telem_testing = 0
+is_img_testing = 1
+is_telem_testing = 1
 
 telemetry_data = {}
 gcs_data = {}
@@ -45,7 +49,7 @@ def detect_and_fire():
 
     global box_data, telemetry_data, can_fire, p
 
-    while True:
+    while (not stop_event.is_set()):
         try:
             if (is_det and (img_feed) is not None):
                 raw_box_data = img_det.get_boxes(img_feed)
@@ -89,26 +93,29 @@ def detect_and_fire():
 ## READ AND SEND IMG
 def read_send_img():
 
-    global img_feed
+    global img_feed, is_img_testing, video, img_recv, img_send
 
-    while True:
+    while (not stop_event.is_set()):
         try:
 
             if (img_recv.is_open and img_send.is_open):
                 img_feed = img_recv.recv()
+                
                 if (img_feed is not None):
-                    img_send.send(img_feed)
-                    read_check[3] += 1
+                    if (is_img_testing):
+                        if (video):
+                            video.out.write(img_feed)
+                    else:
+                        img_send.send(img_feed)
+                        
+                
+                read_check[3] += 1
 
             time.sleep(IMG_WAIT)
 
         except Exception as e:
             loggr.print("ERROR AT THREAD 1 " + str(e), 2)
-            img_send.close()
-            img_recv.close()
             time.sleep(ERROR_WAIT)
-            img_send.start()
-            img_recv.start()        
 
 
 
@@ -116,10 +123,44 @@ def read_send_img():
 def read_data():
     global telemetry_data, gcs_data
 
-    while True:
+    while (not stop_event.is_set()):
         try:
+
+            inputs = []
+
+            try:
+                if (mav_com.sock):
+                    if (mav_com.sock.fileno() >= 0):
+                        inputs.append(mav_com.sock)
+            except:
+                loggr.print("socket error before select", 2)
+
+
+            try:
+                if (mav_com.pixhawk):
+                    fd = mav_com.pixhawk.fd
+                    if (fd is not None and fd >= 0):
+                        inputs.append(fd)
+            except:
+                loggr.print("mavlink error before select 1", 2)
+
+
+            try:
+                if (mav_com.gcs_in):
+                    fd = mav_com.gcs_in.fd
+                    if (fd is not None and fd >= 0):
+                        inputs.append(fd)
+            except:
+                loggr.print("mavlink error before select 2", 2)
+
+
+            if (not inputs):
+                time.sleep(RECV_WAIT)
+                continue
+
+
             readable, _, _ = select.select(
-                [mav_com.sock, mav_com.pixhawk.fd, mav_com.gcs_in.fd],
+                inputs,
                 [], [], 0.01)
 
             if (mav_com.pixhawk.fd in readable and mav_com.mav_connected):
@@ -151,9 +192,13 @@ def read_data():
             loggr.print("ERROR AT THREAD 2 " + str(e), 2)
             mav_com.close_sock()
             mav_com.close_gcs()
-            time.sleep(ERROR_WAIT)
-            mav_com.connect_gcs(IP, *(PORTS[0:2]))
-            mav_com.connect_sock(MSIP, PORTS[2])        
+
+            try:
+                time.sleep(ERROR_WAIT)
+                mav_com.connect_gcs(IP, *(PORTS[0:2]))
+                mav_com.connect_sock(MSIP, PORTS[2])        
+            except Exception as e2:
+                loggr.print("ERROR AT THREAD 2 - 2 " + str(e2), 2)
 
 
 
@@ -162,7 +207,7 @@ def send_data():
 
     global telemetry_data
 
-    while True:
+    while (not stop_event.is_set()):
         try:
 
             mav_com.send_heartbeat()
@@ -198,7 +243,7 @@ def log():
 
     global read_check
 
-    while True:
+    while (not stop_event.is_set()):
         if (signal_lost):
             loggr.print("RC SIGNAL LOST!", 2)
         else:
@@ -228,78 +273,64 @@ def mainloop():
 
     lost_start = -1
 
-    while True:
+    while (not stop_event.is_set()):
+        try:
+            # FAILSAFE
 
-        # FAILSAFE
-
-        if (FAILSAFE_ACTIVE):
-            if telemetry_data.get("RC_CHANNELS") and telemetry_data.get("RC_CHANNELS").rssi < SIGNAL_TRESHOLD:
-                if (lost_start >= 0 and time.time() - lost_start > FAILSAFE_DELAY):
-                    #mav_com.send_fail()
-                    loggr.print(" >>> FAIL SAFE <<< ", 2)            
-                else:
-                    signal_lost = True
-                    lost_start = time.time()
+            if (FAILSAFE_ACTIVE):
+                if telemetry_data.get("RC_CHANNELS") and telemetry_data.get("RC_CHANNELS").rssi < SIGNAL_TRESHOLD:
+                    if (lost_start >= 0 and time.time() - lost_start > FAILSAFE_DELAY):
+                        #mav_com.send_fail()
+                        loggr.print(" >>> FAIL SAFE <<< ", 2)            
+                    else:
+                        signal_lost = True
+                        lost_start = time.time()
             
-            elif signal_lost:
-                signal_lost = False
-                lost_start = -1
+                elif signal_lost:
+                    signal_lost = False
+                    lost_start = -1
 
 
-        # PROCESS GCS DATA
-        blst = gcs_data.get("NAMED_VALUE_INT")
-        if (blst):
-            if (blst[0].value == 0):
-                with firing_lock:
-                    loggr.print("ACTIVATE 1", 0)
-                    p.ChangeDutyCycle(MIN_PWM) 
-                    can_fire[0] = 0
+            # PROCESS GCS DATA
+            blst = gcs_data.get("NAMED_VALUE_INT")
+            if (blst):
+                if (blst[0].value == 0):
+                    with firing_lock:
+                        loggr.print("ACTIVATE 1", 0)
+                        p.ChangeDutyCycle(MIN_PWM) 
+                        can_fire[0] = 0
 
-            elif (blst[0].value == 1):
-                mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))
-                loggr.print("ARM TOGGLE TO: " + str(mav_com.is_armed), 0)
+                elif (blst[0].value == 1):
+                    mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))
+                    loggr.print("ARM TOGGLE TO: " + str(mav_com.is_armed), 0)
 
-            elif (blst[0].value == 2):
-                is_det = False if is_det else True
-                loggr.print("TOGGLE DETECTION TO: " + str(is_det), 0)
+                elif (blst[0].value == 2):
+                    is_det = False if is_det else True
+                    loggr.print("TOGGLE DETECTION TO: " + str(is_det), 0)
 
-            elif (blst[0].value == 3):
-                with firing_lock:
-                    p.ChangeDutyCycle(MAX_PWM)
-                    loggr.print("ACTIVATE 2", 0)
-                    can_fire[1] = 0
+                elif (blst[0].value == 3):
+                    with firing_lock:
+                        p.ChangeDutyCycle(MAX_PWM)
+                        loggr.print("ACTIVATE 2", 0)
+                        can_fire[1] = 0
 
-            elif (blst[0].value == 4):
-                loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
-                mav_com.toggle_control(telemetry_data.get("HEARTBEAT"))
+                elif (blst[0].value == 4):
+                    loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
+                    mav_com.toggle_control(telemetry_data.get("HEARTBEAT"))
                 
 
-            elif (blst[0].value == 5):
-                with firing_lock:
-                    p.ChangeDutyCycle(NET_PWM)
-                    loggr.print("DE-ACTIVATE", 0)
+                elif (blst[0].value == 5):
+                    with firing_lock:
+                        p.ChangeDutyCycle(NET_PWM)
+                        loggr.print("DE-ACTIVATE", 0)
 
-            blst.pop(0)
+                blst.pop(0)
 
-        time.sleep(MAIN_WAIT)
-
-
-
-
-
-
-def save_img():
-    global img_feed
-
-    while True:
-        try:
-            if (img_feed is not None):
-                video.out.write(img_feed)
-
-            time.sleep(0.05)
+            time.sleep(MAIN_WAIT)
 
         except Exception as e:
-            loggr.print("ERROR AT SAVE 1 " + str(e), 2)   
+            loggr.print("ERROR AT THREAD 4 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
 
 
 
@@ -309,17 +340,14 @@ def write_telem():
 
     telem_logger.set_start()
 
-    while True:
+    while (not stop_event.is_set()):
         try:
             telem_logger.write(telemetry_data)
             time.sleep(0.1)
 
         except Exception as e:
             loggr.print("ERROR AT WRITE 1 " + str(e), 2)
-
-
-
-
+            time.sleep(ERROR_WAIT)
 
 
 
@@ -464,35 +492,64 @@ try:
         except:
             loggr.print("Fail!\n", 2)
     
-    
-        if (is_img_testing):
-            loggr.print("Starting with Local Image Save...", 3)
-            video = VideoSave()
-            Thread(target=save_img, daemon=True).start()
-        else:
-            Thread(target=read_send_img, daemon=True).start()
-    
+        main_thread = None
+        telemlog_thread = None
+        detect_thread = None
+        send_thread = None
+        recv_thread = None
+        log_thread = None
+
+
         if (is_telem_testing):
             loggr.print("Starting with Local Telemetry Logging...", 3)
             telem_logger = TelemLog("telem_log.txt")
-            Thread(target=write_telem, daemon=True).start()
+            telemlog_thread = Thread(target=write_telem, daemon=False)
+            telemlog_thread.start()
         else:
-            Thread(target=detect_and_fire, daemon=True).start()
+            detect_thread = Thread(target=detect_and_fire, daemon=False)
+            detect_thread.start()
     
-        Thread(target=send_data, daemon=True).start()
-        Thread(target=read_data, daemon=True).start()
-        Thread(target=log, daemon=True).start()
-    
-        while True:
-            try:
-                mainloop()
-                break
-            except Exception as e:
-                loggr.print("EXCEPTION AT MAINLOOP: " + str(e), 2)
-                time.sleep(ERROR_WAIT)
+        send_thread = Thread(target=send_data, daemon=False)
+        send_thread.start()
+        
+        recv_thread = Thread(target=read_data, daemon=False)
+        recv_thread.start()
+
+        log_thread = Thread(target=log, daemon=False)
+        log_thread.start()
+        
+        main_thread = Thread(target=mainloop, daemon=False)
+        main_thread.start()
+
+        video = None
+        if (is_img_testing):
+            loggr.print("Starting with Local Image Save...", 3)
+            video = VideoSave()           
+        read_send_img()
+
+except KeyboardInterrupt:
+    pass
 
 finally:
     #|||# HALT PROCESS
+
+    loggr.print("HALTING...", 3)
+
+    stop_event.set()
+
+    if (main_thread):
+        main_thread.join()
+    if (telemlog_thread):
+        telemlog_thread.join()
+    if (detect_thread):
+        detect_thread.join()
+    if (send_thread):
+        send_thread.join()
+    if (recv_thread):
+        recv_thread.join()
+    if (log_thread):
+        log_thread.join()
+
     if (mav_com):
         mav_com.close_sock()
         mav_com.close_gcs()
@@ -508,5 +565,8 @@ finally:
 
     if (p):
         p.stop()
+        p = None
     
     GPIO.cleanup()
+
+    loggr.print("HALTED", 1)

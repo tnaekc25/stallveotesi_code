@@ -823,6 +823,11 @@ class TapeIndicator(QWidget):
         self._offy = 0.5
         self.ref = 0
 
+        self.imgw = 0
+        self.imgh = 0
+        self.posx = 0
+        self.posy = 0
+
     def setFactors(self, wf, hf, offx, offy):
         self._wf = wf 
         self._hf = hf
@@ -833,7 +838,7 @@ class TapeIndicator(QWidget):
         self.ratio = num - int(num)
         self.ref = int(num)
 
-    def updateGeometry(self):
+    def updateGeometryCalc(self):
         pw = self.parent_widget.width()
         ph = self.parent_widget.height()
 
@@ -857,7 +862,9 @@ class TapeIndicator(QWidget):
 
         self.scale = self.imgw / 100
 
-        self.setGeometry(posx, posy, self.imgw, self.imgh)
+
+    def updateGeometry(self):
+        self.setGeometry(self.posx, self.posy, self.imgw, self.imgh)
         self.update()
 
     def resizeEvent(self, event):

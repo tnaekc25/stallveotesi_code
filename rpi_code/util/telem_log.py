@@ -1,5 +1,5 @@
 
-import time, datetime
+import time, datetime, numpy as np
 
 class TelemLog:
 
@@ -11,7 +11,9 @@ class TelemLog:
 		return datetime.datetime.now().strftime("%H:%M:%S") + f".{datetime.datetime.now().microsecond // 1000:03d}"
 
 	def set_start(self):
-		self.log_file.write(self.get_time() + "\n")
+		self.log_file.write( self.get_time() + ", " + 
+			", ".join(("roll", "pitch", "yaw", "airspeed", "groundspeed", "climb", "heading",
+			 "altitude", "latitue", "longtitude", "pixhawk_volt", "battery_per", "throttle_inp", "ch1_inp", "ch2_inp", "ch3_inp")) + "\n")
 
 	def write(self, telem_dict):
 
@@ -54,21 +56,21 @@ class TelemLog:
 
 		# GPS Position
 		if (gps):
-			lat = msg.lat / 1e7
-			lon = msg.lon / 1e7
+			lat = gps.lat / 1e7
+			lon = gps.lon / 1e7
     
 		# Battery Status
 		if (sys_stat):
-		    battery_volt = msg.voltage_battery / 1000.0
-		    battery_per = msg.battery_remaining
+		    battery_volt = sys_stat.voltage_battery / 1000.0
+		    battery_per = sys_stat.battery_remaining
     
 		# Control Inputs (throttle, roll, pitch, yaw)
 		if (rc_channel):
-		    cont_inputs = [msg.chan3_raw, msg.chan1_raw, msg.chan2_raw, msg.chan4_raw]
-		    throttle, ch1, ch2, ch3 = tuple([(max(0, min(1, ((x-988) / 993))) if x is not None else 0) for x in self.cont_inputs])
+		    cont_inputs = [rc_channel.chan3_raw, rc_channel.chan1_raw, rc_channel.chan2_raw, rc_channel.chan4_raw]
+		    throttle, ch1, ch2, ch3 = tuple([(max(0, min(1, ((x-988) / 993))) if x is not None else 0) for x in cont_inputs])
 
 		self.log_file.write( self.get_time() + ", " + 
-			", ".join(["{:.2f}".format(x) for x in (roll, pitch, yaw, airspeed, groundspeed, climb, heading,
+			", ".join(["{:.2f}".format(x) if type(x) != str else x for x in (roll, pitch, yaw, airspeed, groundspeed, climb, heading,
 			 alt, lat, lon, battery_volt, battery_per, throttle, ch1, ch2, ch3)]) + "\n")
 
 	def close(self):

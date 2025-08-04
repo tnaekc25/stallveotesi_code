@@ -387,7 +387,7 @@ def restart_gst():
 
 com = MavCom()
 imgcom = None
-Thread(target = restart_gst).start()
+#Thread(target = restart_gst).start()
 
 Thread(target = update_com).start()
 Thread(target = check_com).start()
