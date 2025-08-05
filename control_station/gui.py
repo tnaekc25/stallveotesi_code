@@ -27,6 +27,21 @@ class BottomWidget(ImageWidget):
         super().__init__(image_path, parent)
 
         self.children = []
+        self.prev_vals = {
+            "altitude" : 0,
+            "airspeed" : 0,
+            "ground_speed" : 0,
+            "vertical_speed" : 0,
+            "direction": 0,
+            "roll": 0,
+            "pitch": 0,
+            "cont_inputs_0" : 0,
+            "cont_inputs_1" : 0,
+            "cont_inputs_2" : 0,
+            "cont_inputs_3" : 0,
+            "img_id" : 0,
+            "gps_pos": (0, 0)
+        }
 
         # |||||||||||||||||||||| Images ||||||||||||||||||||||
 
@@ -193,6 +208,13 @@ class BottomWidget(ImageWidget):
         self.telem.setFactors(8, 0.1156, 0.1845, 0.5055, 0.152)
         self.children.append(self.telem)
 
+
+        self.always_updated = [self.telem, self.bt11, self.bt12, self.bt13,
+        self.bt21, self.bt22, self.bt23, self.bt24, self.bt25, self.bt26, self.connected_img]
+
+        self.changed_widgets = []
+
+
         self.is_updating = False
         self.startUpdater()
 
@@ -206,7 +228,7 @@ class BottomWidget(ImageWidget):
 
     def update(self):
         self.updateGeometry()
-        for child in self.children:
+        for child in self.changed_widgets + self.always_updated:
             child.updateGeometry()
         return super().update()
 
@@ -214,71 +236,118 @@ class BottomWidget(ImageWidget):
     def startUpdater(self):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.updateValues)
-        self.timer.start(70)
+        self.timer.start(20)
     
     def updateValues(self):
-
-        if self.is_updating:
-            return
-        self.is_updating = True
-
-        if (com.connected and self.connected_img.name != ("src/connected.png")):
+        self.changed_widgets = []
+    
+        if com.connected and self.connected_img.name != "src/connected.png":
             self.connected_img.setImgbyName("src/connected.png")
-        elif (not com.connected and self.connected_img.name != ("src/not_connected.png")):
+        elif not com.connected and self.connected_img.name != "src/not_connected.png":
             self.connected_img.setImgbyName("src/not_connected.png")
-
-        self.needle1.num2Rot(com.airspeed*100)
-        self.speednum.setDigits(com.airspeed)
-
-        self.needle2.num2Rot(com.altitude*100)
-        self.altnum.setDigits(com.altitude)
-
+    
+        if abs(com.airspeed - self.prev_vals["airspeed"]) > 0.1:
+            self.needle1.num2Rot(com.airspeed*100)
+            self.speednum.setDigits(com.airspeed)
+            self.prev_vals["airspeed"] = com.airspeed
+            self.changed_widgets.append(self.needle1)
+    
+        if abs(com.altitude - self.prev_vals["altitude"]) > 0.1:
+            self.needle2.num2Rot(com.altitude*100)
+            self.altnum.setDigits(com.altitude)
+            self.prev_vals["altitude"] = com.altitude
+            self.changed_widgets.append(self.needle2)
+        
         roll = com.attitude[0] / (np.pi * 2)
         pitch = com.attitude[1] / (np.pi * 2)
+
+        if (abs(com.attitude[0] - self.prev_vals["roll"]) > 0.05 or 
+        abs(com.attitude[1] - self.prev_vals["pitch"]) > 0.05):
+            self.attitude_inner.setRotation(-roll)
+            self.attitude_bezel.setRotation(-roll)
+            self.attitude_inner.setVertical(pitch * 18)
+
+            self.prev_vals["roll"] = com.attitude[0]
+            self.prev_vals["pitch"] = com.attitude[1]
+            self.changed_widgets.extend([self.attitude_inner, self.attitude_bezel])
         
-        self.attitude_inner.setRotation(-roll)
-        self.attitude_bezel.setRotation(-roll)
-        self.attitude_inner.setVertical(pitch * 18)
 
         comprot = - (com.heading / 360)
+        if abs(com.heading - self.prev_vals["direction"]) > 0.1:
+            self.compass.setRotation(comprot)
+            self.gps_comp.updateHeading(np.deg2rad(com.heading))
+            self.prev_vals["direction"] = com.heading
+            self.changed_widgets.extend([self.compass, self.gps_comp])
+    
+        if (abs(com.gps_pos[0] - self.prev_vals["gps_pos"][0]) > 0.0001 or
+            abs(com.gps_pos[1] - self.prev_vals["gps_pos"][1]) > 0.0001):
+            self.gps_comp.updatePosition(*com.gps_pos)
+            self.prev_vals["gps_pos"] = com.gps_pos
+            self.changed_widgets.append(self.gps_comp)
 
-        self.compass.setRotation(comprot)
-        self.gps_comp.updatePosition(*com.gps_pos, np.deg2rad(com.heading))
-        
-        if (self.rot1.changed):
+        if self.rot1.changed:
             self.gps_comp.setRangeLA(self.rot1.counter)
             self.rot1.changed = False
-
-        if (self.rot2.changed):
+            self.changed_widgets.extend([self.gps_comp, self.rot1])
+    
+        if self.rot2.changed:
             self.gps_comp.setRangeLO(self.rot2.counter)
             self.rot2.changed = False
-
-        if (self.rot3.changed):
+            self.changed_widgets.extend([self.gps_comp, self.rot2])
+    
+        if self.rot3.changed:
             self.gps_comp.setGridRefLA(self.rot3.counter)
             self.rot3.changed = False
-
-        if (self.rot4.changed):
+            self.changed_widgets.extend([self.gps_comp, self.rot3])
+    
+        if self.rot4.changed:
             self.gps_comp.setGridRefLO(self.rot4.counter)
             self.rot4.changed = False
+            self.changed_widgets.extend([self.gps_comp, self.rot4])
+    
 
-        self.bar1.setSlide(com.cont_inputs[0])
-        self.bar2.setSlide(com.cont_inputs[1])
-        self.bar3.setSlide(com.cont_inputs[2])
-        self.bar4.setSlide(com.cont_inputs[3])
-
-        self.vertical_tape.setNumber(com.vertical_speed)
-        self.ground_tape.setNumber(com.ground_speed)
+        if abs(com.vertical_speed - self.prev_vals["vertical_speed"]) > 0.1:
+            self.vertical_tape.setNumber(com.vertical_speed)
+            self.prev_vals["vertical_speed"] = com.vertical_speed
+            self.changed_widgets.append(self.vertical_tape)
+    
+        if abs(com.ground_speed - self.prev_vals["ground_speed"]) > 0.1:
+            self.ground_tape.setNumber(com.ground_speed)
+            self.prev_vals["ground_speed"] = com.ground_speed
+            self.changed_widgets.append(self.ground_tape)
+    
+        if abs(com.cont_inputs[0] - self.prev_vals["cont_inputs_0"]) > 0.01:
+            self.bar1.setSlide(com.cont_inputs[0])
+            self.prev_vals["cont_inputs_0"] = com.cont_inputs[0]
+            self.changed_widgets.append(self.bar1)
+        
+        if abs(com.cont_inputs[1] - self.prev_vals["cont_inputs_1"]) > 0.01:
+            self.bar2.setSlide(com.cont_inputs[1])
+            self.prev_vals["cont_inputs_1"] = com.cont_inputs[1]
+            self.changed_widgets.append(self.bar2)
+    
+        if abs(com.cont_inputs[2] - self.prev_vals["cont_inputs_2"]) > 0.01:
+            self.bar3.setSlide(com.cont_inputs[2])
+            self.prev_vals["cont_inputs_2"] = com.cont_inputs[2]
+            self.changed_widgets.append(self.bar3)
+    
+        if abs(com.cont_inputs[3] - self.prev_vals["cont_inputs_3"]) > 0.01:
+            self.bar4.setSlide(com.cont_inputs[3])
+            self.prev_vals["cont_inputs_3"] = com.cont_inputs[3]
+            self.changed_widgets.append(self.bar4)
 
         self.telem.setText(self.telem_text.format(*[format(x, ".4g") if type(x) != str else x for x in (
             com.airspeed, com.altitude, com.heading, 0,
             roll*360, pitch*360, com.attitude[2] * (360 / (np.pi * 2)),
             "YES" if com.is_armed else "NO", "MANUAL" if com.control_mode else "AUTO",
             f"{'Y' if com.left_stat else 'N'} - {'Y' if com.right_stat else 'N'}",
-            com.battery_per, com.battery_volt , com.cont_inputs[0])]))
-
-        self.image_comp.setImg(upimg)
-        self.is_updating = False
-
+            com.battery_per, com.battery_volt, com.cont_inputs[0])]))
+        
+        if (id(upimg) != self.prev_vals["img_id"]):
+            self.image_comp.setImg(upimg)
+            self.prev_vals["img_id"] = id(upimg)
+            self.changed_widgets.append(self.image_comp)
+    
         self.update()
 
 
@@ -324,6 +393,7 @@ def update_com():
         try:
             if (com.mav_in and com.mav_out):
                 com.recv_message()
+                #com.read_test()
             else:
                 time.sleep(1)
         except Exception as e:

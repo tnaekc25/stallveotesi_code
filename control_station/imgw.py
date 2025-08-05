@@ -117,6 +117,7 @@ class SlideDigit(QWidget):
         self.num2 = "1"
 
         self.font1 = 0
+        self.rect1 = self.rect2 = None
 
     def setFactors(self, wf, hf, offx, offy):
         self._wf = wf 
@@ -163,6 +164,9 @@ class SlideDigit(QWidget):
         return super().resizeEvent(event)
 
     def paintEvent(self, event):
+
+        if (not self.rect1 or not self.rect2):
+            return
 
         painter = QPainter(self)
 
@@ -621,16 +625,16 @@ class MapWidget(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
 
-    def updatePosition(self, lat, lon, head):
+    def updatePosition(self, lat, lon):
         self.current_lat = lat
         self.current_lon = lon
+
+    def updateHeading(self, head):
         self.curret_head = head
-        self.update()
 
     def setPos(self, lat, lon):
         self.center_lat = lat
         self.center_lon = lon
-        self.update()
 
 
     def setRangeLA(self, rangev):
@@ -825,8 +829,7 @@ class TapeIndicator(QWidget):
 
         self.imgw = 0
         self.imgh = 0
-        self.posx = 0
-        self.posy = 0
+
 
     def setFactors(self, wf, hf, offx, offy):
         self._wf = wf 
@@ -838,7 +841,7 @@ class TapeIndicator(QWidget):
         self.ratio = num - int(num)
         self.ref = int(num)
 
-    def updateGeometryCalc(self):
+    def updateGeometry(self):
         pw = self.parent_widget.width()
         ph = self.parent_widget.height()
 
@@ -862,9 +865,7 @@ class TapeIndicator(QWidget):
 
         self.scale = self.imgw / 100
 
-
-    def updateGeometry(self):
-        self.setGeometry(self.posx, self.posy, self.imgw, self.imgh)
+        self.setGeometry(posx, posy, self.imgw, self.imgh)
         self.update()
 
     def resizeEvent(self, event):
