@@ -95,7 +95,7 @@ The system relies entirely on MAVLink for communication between the on-board sof
 
 3. **Run Ground Control Station** (on operator PC):
     ```bash
-    python main_gcs.py
+    python gui.py
 
 Author
 
