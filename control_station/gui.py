@@ -209,7 +209,7 @@ class BottomWidget(ImageWidget):
 """
 
         self.telem = TelemBox(self, self.telem_text.format(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), self)
-        self.telem.setFactors(8, 0.1156, 0.1845, 0.5055, 0.152)
+        self.telem.setFactors(8, 0.12, 0.19, 0.5055, 0.152)
         self.children.append(self.telem)
 
 
