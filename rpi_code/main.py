@@ -34,20 +34,45 @@ is_det = False
 loggr = Log()
 
 read_check = [0, 0, 0, 0]
+write_check = [0, 0, 0]
+
 signal_lost = False
 
 #############################
 
 firing_lock = Lock()
-can_fire = [1, 1]
+detection_count = [0, 0]
 
 #############################
+
+
+
+def fire(num):
+    global detection_count
+
+    if (num):
+        if (detection_count[1] < REQUIRED_DETECTION_COUNT):
+            detection_count[1] += 1
+        elif (detection_count[1] == REQUIRED_DETECTION_COUNT):
+            detection_count[1] += 1
+            p.ChangeDutyCycle(MAX_PWM)
+    else:
+        if (detection_count[0] < REQUIRED_DETECTION_COUNT):
+            detection_count[0] += 1
+        elif (detection_count[0] == REQUIRED_DETECTION_COUNT):
+            detection_count[0] += 1
+            p.ChangeDutyCycle(MIN_PWM)
+
+
 
 
 ## APPLY OBJECT DETECTION AND RUN SIMULATION
 def detect_and_fire():
 
-    global box_data, telemetry_data, can_fire, p
+    global box_data, telemetry_data
+
+    detection_count1 = 0
+    detection_count2 = 0
 
     while (not stop_event.is_set()):
         try:
@@ -70,18 +95,12 @@ def detect_and_fire():
                         c = sim.simulate(np.array((0, 0, hud.alt, ned.vx, ned.vy, ned.vz)), MDELAY)
                         x, y, z = c[0:3]
 
-                        cls = box[0]
+                        clss = box[0]
 
                         with firing_lock:
                             if (abs(detx-x) < 2 and abs(dety-y) < 2):
-                                loggr.print("AUTO ACTIVATE MECHANISM", 3)
-                                p.ChangeDutyCycle(MIN_PWM if cls else MAX_PWM)
-
-                                if (cls):
-                                    can_fire[0] = 0
-                                else:
-                                    can_fire[1] = 0
-
+                                loggr.print("AUTO ACTIVATE MECHANISM >> ", clss, 3)
+                                fire(clss)
 
             time.sleep(DET_WAIT)
         
@@ -168,12 +187,14 @@ def read_data():
                 if (msg):
                     telemetry_data[msg.get_type()] = msg
                     mav_com.send_planner(msg.get_msgbuf())
+                    write_check[1] += 1
                     read_check[0] += 1
 
             if (mav_com.sock in readable and mav_com.sock_connected):
                 planner_data = mav_com.read_planner()
                 if (planner_data):
                     mav_com.write_pixhawk(planner_data) 
+                    write_check[0] += 1
                     read_check[1] += 1
 
             if (mav_com.gcs_in.fd in readable and mav_com.mav_connected):
@@ -205,7 +226,7 @@ def read_data():
 # SEND DATA TO GCS AND MISSION PLANNER
 def send_data():
 
-    global telemetry_data
+    global telemetry_data, detection_count, is_det
 
     while (not stop_event.is_set()):
         try:
@@ -215,16 +236,19 @@ def send_data():
             for _, msg in list(telemetry_data.items()):
                     if (msg) and not msg.get_type().startswith("UNKNOWN_"):
                         mav_com.send_gcs(msg)
+                        write_check[2] += 1
 
-                        mav_com.gcs_out.mav.statustext_send(
-                            severity=6,
-                            text=("STATINF"
-                                + ('1' if mav_com.is_armed else '0')
-                                + ('1' if (mav_com.control_mode == 'MANUAL') else '0')
-                                + ('1' if can_fire[0] else '0')
-                                + ('1' if can_fire[1] else '0')
-                                ).encode('utf-8')
-                        )
+            # SEND INFO
+            mav_com.gcs_out.mav.statustext_send(
+                severity=6,
+                text=("STATINF"
+                + ('1' if mav_com.is_armed else '0')
+                + ('1' if (mav_com.control_mode == 'MANUAL') else '0')
+                + ('1' if detection_count[0] else '0')
+                + ('1' if detection_count[1] else '0')
+                + ('1' if is_det else '0')
+                ).encode('utf-8')
+            )
 
             # SEND BOXES
             for box in box_data:
@@ -241,7 +265,7 @@ def send_data():
 
 def log():
 
-    global read_check
+    global read_check, write_check
 
     while (not stop_event.is_set()):
         if (signal_lost):
@@ -249,19 +273,25 @@ def log():
         else:
             loggr.print("READ STATUS: ", 3, "")
             loggr.raw_print("|", 0, "")
-            loggr.raw_print(f" PIXHAWK:{read_check[0]} ", 1 if read_check[0] else 2, "")
+            loggr.raw_print(f" PXHWK:{read_check[0]}/{write_check[0]} ",
+                1 if (read_check[0] or write_check[0]) else 2, "")
             loggr.raw_print("|", 0, "")
-            loggr.raw_print(f" PLANNER:{read_check[1]} ", 1 if read_check[1] else 2, "")
+            loggr.raw_print(f" PLNR:{read_check[1]}/{write_check[1]} ",
+                1 if (read_check[1] or write_check[1]) else 2, "")
             loggr.raw_print("|", 0, "")
-            loggr.raw_print(f" GCS:{read_check[2]} " , 1 if read_check[2] else 2, "")
+            loggr.raw_print(f" GCS:{read_check[2]}/{write_check[2]} " ,
+                1 if (read_check[2] or write_check[2]) else 2, "")
             loggr.raw_print("|", 0, "")
-            loggr.raw_print(f" Camera:{read_check[3]} ", 1 if read_check[3] else 2, "")
+            loggr.raw_print(f" CAM:{read_check[3]} ",
+                1 if (read_check[3]) else 2, "")
             loggr.raw_print("|", 0, "")
+
             if telemetry_data.get("RC_CHANNELS"):
                 loggr.raw_print(f" ({telemetry_data.get('RC_CHANNELS').rssi}) ", 3)
                 loggr.raw_print("|", 0, "")
 
         read_check = [0, 0, 0, 0]
+        write_check = [0, 0, 0]
 
         time.sleep(LOG_WAIT)
 
@@ -269,7 +299,7 @@ def log():
 # PROCESS DATA
 def mainloop():
 
-    global gcs_data, is_det, telemetry_data, signal_lost, can_fire, p
+    global gcs_data, is_det, telemetry_data, signal_lost
 
     lost_start = -1
 
@@ -297,8 +327,7 @@ def mainloop():
                 if (blst[0].value == 0):
                     with firing_lock:
                         loggr.print("ACTIVATE 1", 0)
-                        p.ChangeDutyCycle(MIN_PWM) 
-                        can_fire[0] = 0
+                        fire(0)
 
                 elif (blst[0].value == 1):
                     mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))
@@ -310,14 +339,12 @@ def mainloop():
 
                 elif (blst[0].value == 3):
                     with firing_lock:
-                        p.ChangeDutyCycle(MAX_PWM)
                         loggr.print("ACTIVATE 2", 0)
-                        can_fire[1] = 0
+                        fire(1)
 
                 elif (blst[0].value == 4):
                     loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
                     mav_com.toggle_control(telemetry_data.get("HEARTBEAT"))
-                
 
                 elif (blst[0].value == 5):
                     with firing_lock:

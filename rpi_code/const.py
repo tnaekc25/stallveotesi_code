@@ -32,6 +32,12 @@ NET_PWM = 7.11
 MAX_PWM = 12.874
 MDELAY = 1
 SERVO_PIN = 12
+REQUIRED_DETECTION_COUNT = 3
+
+#############################################
+
+
+#############################################
 
 SIGNAL_TRESHOLD = 10
 ERROR_TRY_COUNT = 3
