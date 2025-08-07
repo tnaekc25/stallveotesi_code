@@ -53,6 +53,10 @@ class BottomWidget(ImageWidget):
         self.connected_img.setFactors(0.03897, 0.0673, 0.7118, 0.072)
         self.children.append(self.connected_img)
 
+        self.detection_on = ImageWidget("src/connected.png", self, self)
+        self.detection_on.setFactors(0.03897, 0.0673, 0.7493, 0.072)
+        self.children.append(self.detection_on)
+
 
         # |||||||||||||||||||||| GPS ||||||||||||||||||||||
 
@@ -245,6 +249,12 @@ class BottomWidget(ImageWidget):
             self.connected_img.setImgbyName("src/connected.png")
         elif not com.connected and self.connected_img.name != "src/not_connected.png":
             self.connected_img.setImgbyName("src/not_connected.png")
+
+        if com.is_det and self.detection_on.name != "src/connected.png":
+            self.detection_on.setImgbyName("src/connected.png")
+        elif not com.connected and self.detection_on.name != "src/not_connected.png":
+            self.detection_on.setImgbyName("src/not_connected.png")
+
     
         if abs(com.airspeed - self.prev_vals["airspeed"]) > 0.1:
             self.needle1.num2Rot(com.airspeed*100)

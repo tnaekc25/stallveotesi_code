@@ -36,6 +36,7 @@ class MavCom:
         self.control_mode = 0
         self.left_stat = 0
         self.right_stat = 0
+        self.is_det = 0
 
 
         self.last_heartbeat = -1
@@ -93,7 +94,8 @@ class MavCom:
             print(">>> CONNECTION LOST for 3 SEC...")
 
 
-    """def read_test(self):
+    ## TESTING ##
+    def read_test(self):
 
 
         if (self.mav_in == None):
@@ -124,7 +126,8 @@ class MavCom:
         self.gps_pos = (arr[11], arr[12])
     
         self.battery_volt = 0
-        self.battery_per = 0"""
+        self.battery_per = 0
+    ###########
             
 
 
@@ -189,6 +192,7 @@ class MavCom:
                             self.control_mode = spltted[1] == '1'
                             self.left_stat = spltted[2] == '1'
                             self.right_stat = spltted[3] == '1'
+                            self.is_det = spltted[4] == '1'
 
             return 1
 
