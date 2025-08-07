@@ -2,7 +2,7 @@
 
 It is the on-board software and ground control system for an autonomous UAV. The system's primary function is to autonomously detect and engage targets, while providing a robust, real-time interface for human operators.
 
-The architecture is built for reliability and real-time performance, utilizing a multi-threaded approach on a Raspberry Pi to handle concurrent tasks such as MAVLink communication, specialized night vision video processing, and hardware control. A dedicated Ground Control Station (GCS) application provides a comprehensive user interface for monitoring and control.
+The architecture is built for reliability and real-time performance, utilizing a multi-threaded approach on a Raspberry Pi to handle concurrent tasks such as MAVLink communication, video processing, and hardware control. A dedicated Ground Control Station (GCS) application provides a comprehensive user interface for monitoring and control.
 
 ## System Architecture
 
@@ -39,7 +39,7 @@ The GCS serves as the operator's primary interface for the entire mission. Its d
   The central display provides an at-a-glance view of all critical flight and system parameters.
 
   - **Live Video Feed**  
-    Displays the night-vision perspective in real-time, with overlays of detected object bounding boxes for immediate visual feedback.
+    Displays the perspective in real-time, with overlays of detected object bounding boxes for immediate visual feedback.
 
   - **Analog Gauges**  
     Visual gauges provide quick, intuitive readings of key flight data:
