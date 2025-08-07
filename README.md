@@ -84,14 +84,17 @@ The system relies entirely on MAVLink for communication between the on-board sof
 
    ```bash
    python main.py <GCS_IP> <MISSION_PLANNER_IP> [IS_TELEM_TESTING] [IS_IMG_TESTING]
+   ```
 
-  <GCS_IP>: IP address of the computer running the GCS application. (If MISSION_PLANNER_IP is not provided, it is also used as MISSION_PLANNER_IP)
+   ```bash
+   <GCS_IP>: IP address of the computer running the GCS application. If MISSION_PLANNER_IP is not provided, it is also used as MISSION_PLANNER_IP
 
-  <MISSION_PLANNER_IP>: IP address of the mission planner.
+   <MISSION_PLANNER_IP>: IP address of the mission planner.
 
-  [IS_TELEM_TESTING]: (Optional) 1 to enable local telemetry logging.
+   [IS_TELEM_TESTING]: (Optional) 1 to enable local telemetry logging.
 
-  [IS_IMG_TESTING]: (Optional) 1 to enable local video recording.
+   [IS_IMG_TESTING]: (Optional) 1 to enable local video recording.
+   ```
 
 3. **Run Ground Control Station** (on operator PC):
     ```bash
