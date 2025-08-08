@@ -1,21 +1,22 @@
-
-from imgw import (ImageWidget, FullDigits, Needle, Attitude, BarWidget,
- StyledButton, StyledButton2, TelemBox, MapWidget, PotentiometerWidget, TapeIndicator)
+from imgw import (
+    ImageWidget, FullDigits, Needle, Attitude, BarWidget,
+    StyledButton, StyledButton2, TelemBox, MapWidget,
+    PotentiometerWidget, TapeIndicator
+)
 
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel
-from PyQt6.QtGui import QPixmap, QPainter
-from PyQt6.QtGui import QMouseEvent
-from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtCore import Qt, QTimer
 
-import sys, os, numpy as np, time, random
+import sys
+import os
+import numpy as np
+import time
 from threading import Thread
 
 from cscom import MavCom, ImageCom
 
 
 os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0' 
-os.environ['QT_SCALE_FACTOR'] = '1' 
-os.environ['QT_FONT_DPI'] = '0'
 
 upimg = None
 IP = "10.239.207.118" 
@@ -217,9 +218,6 @@ class BottomWidget(ImageWidget):
         self.bt21, self.bt22, self.bt23, self.bt24, self.bt25, self.bt26, self.connected_img]
 
         self.changed_widgets = []
-
-
-        self.is_updating = False
         self.startUpdater()
 
 
@@ -240,7 +238,7 @@ class BottomWidget(ImageWidget):
     def startUpdater(self):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.updateValues)
-        self.timer.start(20)
+        self.timer.start(10)
     
     def updateValues(self):
         self.changed_widgets = []
@@ -261,12 +259,14 @@ class BottomWidget(ImageWidget):
             self.speednum.setDigits(com.airspeed)
             self.prev_vals["airspeed"] = com.airspeed
             self.changed_widgets.append(self.needle1)
+            self.speednum.addToList(self.changed_widgets)
     
         if abs(com.altitude - self.prev_vals["altitude"]) > 0.1:
             self.needle2.num2Rot(com.altitude*100)
             self.altnum.setDigits(com.altitude)
             self.prev_vals["altitude"] = com.altitude
             self.changed_widgets.append(self.needle2)
+            self.altnum.addToList(self.changed_widgets)
         
         roll = com.attitude[0] / (np.pi * 2)
         pitch = com.attitude[1] / (np.pi * 2)

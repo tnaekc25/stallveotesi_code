@@ -47,7 +47,7 @@ detection_count = [0, 0]
 
 
 
-def fire(num):
+def activate_mech(num):
     global detection_count
 
     if (num):
@@ -98,9 +98,9 @@ def detect_and_fire():
                         clss = box[0]
 
                         with firing_lock:
-                            if (abs(detx-x) < 2 and abs(dety-y) < 2):
+                            if (abs(detx-x) < MAX_DIST and abs(dety-y) < MAX_DIST):
                                 loggr.print("AUTO ACTIVATE MECHANISM >> ", clss, 3)
-                                fire(clss)
+                                activate_mech(clss)
 
             time.sleep(DET_WAIT)
         
@@ -327,7 +327,7 @@ def mainloop():
                 if (blst[0].value == 0):
                     with firing_lock:
                         loggr.print("ACTIVATE 1", 0)
-                        fire(0)
+                        activate_mech(0)
 
                 elif (blst[0].value == 1):
                     mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))
@@ -340,7 +340,7 @@ def mainloop():
                 elif (blst[0].value == 3):
                     with firing_lock:
                         loggr.print("ACTIVATE 2", 0)
-                        fire(1)
+                        activate_mech(1)
 
                 elif (blst[0].value == 4):
                     loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)

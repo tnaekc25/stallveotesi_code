@@ -3,12 +3,10 @@ import os
 os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
 import cv2
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
-from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QRegion, QPalette, QColor, QFont, QImage
-from PyQt6.QtCore import Qt, QSize, QPoint, QRect, QRectF, QUrl
-from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWidgets import QWidget, QPushButton
+from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QPalette, QColor, QFont, QImage, QPen
+from PyQt6.QtCore import Qt, QSize, QPoint, QRect, QRectF
 import numpy as np
-import folium
 
 RATIO = 16/9
 
@@ -199,6 +197,9 @@ class FullDigits:
         self.digit4 = SlideDigit(parent_widget, parent)
         self.digit4.setFactors(0.00035, 0.0006, offx+intv*3, offy)
 
+        self.addToList(chlst)
+
+    def addToList(self, chlst):
         chlst.append(self.digit1)
         chlst.append(self.digit2)
         chlst.append(self.digit3)
@@ -236,19 +237,6 @@ class Needle(ImageWidget):
 
     def num2Rot(self, num):
         self.setRotation((num % self.ul - self.ll) / self.margin)
-
-
-
-
-class SlideBand(ImageWidget):
-
-    def __init__(self, image_path, parent_widget, parent = None):
-        super().__init__(image_path, parent_widget, parent)
-        self.ratio = 0
-
-    def setSlide(self, ratio):
-        self.ratio = ratio
-
 
 
 
@@ -564,11 +552,6 @@ class TelemBox(QWidget):
         painter.drawText(self.rect1, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, self.text)
 
         painter.end()
-
-
-from PyQt6.QtWidgets import QWidget
-from PyQt6.QtGui import QPainter, QColor, QFont, QPen
-from PyQt6.QtCore import Qt
 
 
 class MapWidget(QWidget):
