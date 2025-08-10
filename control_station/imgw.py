@@ -24,17 +24,9 @@ class ImageWidget(QWidget):
         self.imgw = self.imgh = 0
         self.scaled_img = None
 
-    
-    def cv2_to_qpixmap(self, cv_img):
-        rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb_image.shape
-        bytes_per_line = ch * w
-        q_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-        return QPixmap.fromImage(q_image)
-
     def setImg(self, img):
         if (img is not None):
-            self.img = self.cv2_to_qpixmap(img)
+            self.img = img
         self.rescaleImage()
 
     def setImgbyName(self, img):
@@ -62,6 +54,9 @@ class ImageWidget(QWidget):
             Qt.TransformationMode.SmoothTransformation)
 
 
+    def updateLayer(self):
+        self.setGeometry(self.posx, self.posy, self.rw, self.rh)
+
     def updateGeometry(self):
 
         rrot = np.deg2rad(self.rot)
@@ -72,22 +67,21 @@ class ImageWidget(QWidget):
         self.imgw = round(max(pw, (ph*RATIO))*self._wf)
         self.imgh = round(max(ph, (pw/RATIO))*self._hf)
 
-        rw = round(abs(np.sin(rrot)*self.imgh) + abs(np.cos(rrot)*self.imgw))
-        rh = round(abs(np.cos(rrot)*self.imgh) + abs(np.sin(rrot)*self.imgw))
+        self.rw = round(abs(np.sin(rrot)*self.imgh) + abs(np.cos(rrot)*self.imgw))
+        self.rh = round(abs(np.cos(rrot)*self.imgh) + abs(np.sin(rrot)*self.imgw))
 
-        posx = round(pw*self._offx-rw // 2)
-        posy = round(ph*self._offy-rh // 2)
-
-        self.setGeometry(posx, posy, rw, rh)
+        self.posx = round(pw*self._offx-self.rw // 2)
+        self.posy = round(ph*self._offy-self.rh // 2)
 
 
     def setRotation(self, degree):
         self.rot = (360 * degree * self.rf + self.intr) % 360
+        self.updateGeometry()
+        self.updateLayer()
 
 
     def resizeEvent(self, event):
         self.rescaleImage()
-        return super().resizeEvent(event)
 
 
     def paintEvent(self, event):
@@ -117,11 +111,20 @@ class SlideDigit(QWidget):
         self.font1 = 0
         self.rect1 = self.rect2 = None
 
+        self.posx = 0
+        self.posy = 0
+        self.w = 0
+        self.h = 0
+
     def setFactors(self, wf, hf, offx, offy):
         self._wf = wf 
         self._hf = hf
         self._offx = offx
         self._offy = offy
+
+
+    def updateLayer(self):
+        self.setGeometry(self.posx, self.posy, self.w, self.h)
 
 
     def updateGeometry(self):
@@ -144,10 +147,8 @@ class SlideDigit(QWidget):
             QPoint(0, round(self.hr*50)-h), QPoint(self.w, round(self.hr*50)+self.h-h)
         )
 
-        posx = round(pw*self._offx-self.w // 2)
-        posy = round(ph*self._offy-self.h // 2)
-
-        self.setGeometry(posx, posy, self.w, self.h)
+        self.posx = round(pw*self._offx-self.w // 2)
+        self.posy = round(ph*self._offy-self.h // 2)
 
 
     def setSlide(self, num1, num2, ratio):
@@ -157,9 +158,12 @@ class SlideDigit(QWidget):
 
         self.ratio = ratio
 
+        self.updateGeometry()
+        self.updateLayer()
+
 
     def resizeEvent(self, event):
-        return super().resizeEvent(event)
+        pass
 
     def paintEvent(self, event):
 
@@ -225,6 +229,7 @@ class FullDigits:
         self.digit4.setSlide(d4, (d4+1) % 10, r4**4)
 
 
+
 class Needle(ImageWidget):
     
     def __init__(self, image_path, parent_widget, parent = None):
@@ -282,15 +287,13 @@ class Attitude(ImageWidget):
         self.imgw = round(max(pw, (ph*RATIO))*self._wf)
         self.imgh = round(self.hr)
 
-        rw = round(abs(np.sin(rrot)*self.imgh) + abs(np.cos(rrot)*self.imgw))
-        rh = round(abs(np.cos(rrot)*self.imgh) + abs(np.sin(rrot)*self.imgw))
+        self.rw = round(abs(np.sin(rrot)*self.imgh) + abs(np.cos(rrot)*self.imgw))
+        self.rh = round(abs(np.cos(rrot)*self.imgh) + abs(np.sin(rrot)*self.imgw))
 
         self.hshift = round(self.ratio*self.hr/11.7)
 
-        posx = round(pw*self._offx-rw // 2)
-        posy = round(ph*self._offy-rh // 2)
-
-        self.setGeometry(posx, posy, rw, rh)
+        self.posx = round(pw*self._offx-self.rw // 2)
+        self.posy = round(ph*self._offy-self.rh // 2)
 
 
     def paintEvent(self, event):
@@ -328,6 +331,12 @@ class BarWidget(QWidget):
 
         self.ratio = 1
 
+        self.posx = 0
+        self.pos = 0
+        self.imgw = 0
+        self.imgh = 0
+
+
     def setFactors(self, wf, hf, offx, offy):
         self._wf = wf 
         self._hf = hf
@@ -337,9 +346,15 @@ class BarWidget(QWidget):
 
     def setSlide(self, ratio):
         self.ratio = ratio
+        self.updateGeometry()
+        self.updateLayer()
 
     def resizeEvent(self, event):
-        return super().resizeEvent(event)
+        pass
+
+
+    def updateLayer(self):
+        self.setGeometry(self.posx, self.posy, self.imgw, self.imgh)
 
     def updateGeometry(self):
 
@@ -349,13 +364,11 @@ class BarWidget(QWidget):
         h = max(ph, (pw/RATIO))*self._hf
         w = max(pw, (ph*RATIO))*self._wf
 
-        posx = round(pw*self._offx - w / 2)
-        posy = int(ph*self._offy - 2*(self.ratio-0.5)*(h / 2))
+        self.posx = round(pw*self._offx - w / 2)
+        self.posy = int(ph*self._offy - 2*(self.ratio-0.5)*(h / 2))
 
         self.imgh = round(h*self.ratio)
         self.imgw = round(w)
-
-        self.setGeometry(posx, posy, self.imgw, self.imgh)
 
 
 
@@ -394,6 +407,12 @@ class StyledButton(QPushButton):
         }
 """)
 
+
+        self.posx = 0 
+        self.posy = 0
+        self.tw = 0 
+        self.t = 0
+
         
 
     def setFactors(self, wf, hf, offx, offy):
@@ -404,24 +423,26 @@ class StyledButton(QPushButton):
 
 
     def resizeEvent(self, event):
-        return super().resizeEvent(event)
+        pass
+
+
+    def updateLayer(self):
+        self.setGeometry(self.posx, self.posy, round(self.tw), round(self.th))
+
 
     def updateGeometry(self):
     
         ph = self.parent_widget.height()
         pw = self.parent_widget.width()
 
-        tw = (max(pw, (ph*RATIO))*self._wf)
-        th = (max(ph, (pw/RATIO))*self._hf)
+        self.tw = (max(pw, (ph*RATIO))*self._wf)
+        self.th = (max(ph, (pw/RATIO))*self._hf)
 
-        posx = round(pw*self._offx-tw / 2)
-        posy = round(ph*self._offy-th / 2)
+        self.posx = round(pw*self._offx-self.tw / 2)
+        self.posy = round(ph*self._offy-self.th / 2)
 
         factor = ph/1664
         self.setFont(QFont("Arial", round(8*factor), QFont.Weight.Black))
-
-        self.setGeometry(posx, posy, round(tw), round(th))
-
 
 
 class StyledButton2(QPushButton):
@@ -459,6 +480,16 @@ class StyledButton2(QPushButton):
     }
     """)
 
+
+        self.posx = 0 
+        self.posy = 0
+        self.tw = 0 
+        self.t = 0
+    
+
+    def updateLayer(self):
+        self.setGeometry(self.posx, self.posy, round(self.tw), round(self.th))
+
         
 
     def setFactors(self, wf, hf, offx, offy):
@@ -469,23 +500,21 @@ class StyledButton2(QPushButton):
 
 
     def resizeEvent(self, event):
-        return super().resizeEvent(event)
+        pass
 
     def updateGeometry(self):
     
         ph = self.parent_widget.height()
         pw = self.parent_widget.width()
 
-        tw = (max(pw, (ph*RATIO))*self._wf)
-        th = (max(ph, (pw/RATIO))*self._hf)
+        self.tw = (max(pw, (ph*RATIO))*self._wf)
+        self.th = (max(ph, (pw/RATIO))*self._hf)
 
-        posx = round(pw*self._offx-tw / 2)
-        posy = round(ph*self._offy-th / 2)
+        self.posx = round(pw*self._offx-self.tw / 2)
+        self.posy = round(ph*self._offy-self.th / 2)
 
         factor = ph/1664
         self.setFont(QFont("Arial", round(8*factor), QFont.Weight.Black))
-
-        self.setGeometry(posx, posy, round(tw), round(th))
 
 
 
@@ -501,6 +530,11 @@ class TelemBox(QWidget):
 
         self.text = text
 
+        self.posx = 0
+        self.posy = 0
+        self.imgw = 0
+        self.imgh = 0
+
 
     def setFactors(self, basef, wf, hf, offx, offy):
         self._wf = wf 
@@ -508,6 +542,10 @@ class TelemBox(QWidget):
         self._offx = offx
         self._offy = offy
         self.basef = basef
+
+
+    def updateLayer(self):
+        self.setGeometry(self.posx, self.posy, self.imgw, self.imgh)
 
 
     def updateGeometry(self):
@@ -523,8 +561,8 @@ class TelemBox(QWidget):
         self.imgw = round(raww)
         self.imgh = round(rawh)
 
-        posx = round(pw*self._offx-self.imgw // 2)
-        posy = round(ph*self._offy-self.imgh // 2)
+        self.posx = round(pw*self._offx-self.imgw // 2)
+        self.posy = round(ph*self._offy-self.imgh // 2)
 
         self.rect1 = QRect(
             QPoint(0, 0), QPoint(self.imgw, self.imgh)
@@ -532,13 +570,12 @@ class TelemBox(QWidget):
 
         self.font1 = round(self.basef*(h/1664))
 
-        self.setGeometry(posx, posy, self.imgw, self.imgh)
 
     def setText(self, text):
         self.text = text
 
     def resizeEvent(self, event):
-        return super().resizeEvent(event)
+        pass
 
     def paintEvent(self, event):
 
@@ -582,12 +619,19 @@ class MapWidget(QWidget):
 
         self.scale = 0
 
+        self.posx = 0
+        self.posy = 0
+        self.imgw = 0
+        self.imgh = 0
+        
+    def updateLayer(self):
+        self.setGeometry(self.posx, self.posy, self.imgw, self.imgh)
+
     def setFactors(self, wf, hf, offx, offy):
         self._wf = wf
         self._hf = hf
         self._offx = offx
         self._offy = offy
-        self.update()
 
     def updateGeometry(self):
         if not self.parent():
@@ -598,15 +642,10 @@ class MapWidget(QWidget):
         self.imgw = round(max(pw, (ph * 16 / 9)) * self._wf)
         self.imgh = round(max(ph, (pw / (16 / 9))) * self._hf)
 
-        posx = round(pw * self._offx - self.imgw // 2)
-        posy = round(ph * self._offy - self.imgh // 2)
+        self.posx = round(pw * self._offx - self.imgw // 2)
+        self.posy = round(ph * self._offy - self.imgh // 2)
 
         self.scale = self.imgw / 350
-
-        self.setGeometry(posx, posy, self.imgw, self.imgh)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
 
     def updatePosition(self, lat, lon):
         self.current_lat = lat
@@ -618,6 +657,10 @@ class MapWidget(QWidget):
     def setPos(self, lat, lon):
         self.center_lat = lat
         self.center_lon = lon
+
+
+    def resizeEvent(self, event):
+        pass
 
 
     def setRangeLA(self, rangev):
@@ -812,6 +855,8 @@ class TapeIndicator(QWidget):
 
         self.imgw = 0
         self.imgh = 0
+        self.posx = 0
+        self.posy = 0
 
 
     def setFactors(self, wf, hf, offx, offy):
@@ -824,6 +869,9 @@ class TapeIndicator(QWidget):
         self.ratio = num - int(num)
         self.ref = int(num)
 
+        self.updateGeometry()
+        self.updateLayer()
+
     def updateGeometry(self):
         pw = self.parent_widget.width()
         ph = self.parent_widget.height()
@@ -835,8 +883,8 @@ class TapeIndicator(QWidget):
 
         csize = self.imgh / self.draw_count
 
-        posx = round(pw * self._offx - self.imgw // 2)
-        posy = round(ph * self._offy - self.imgh // 2)
+        self.posx = round(pw * self._offx - self.imgw // 2)
+        self.posy = round(ph * self._offy - self.imgh // 2)
 
         self.rect_lst.clear()
 
@@ -848,11 +896,11 @@ class TapeIndicator(QWidget):
 
         self.scale = self.imgw / 100
 
-        self.setGeometry(posx, posy, self.imgw, self.imgh)
-        self.update()
+    def updateLayer(self):
+        self.setGeometry(self.posx, self.posy, self.imgw, self.imgh)
 
     def resizeEvent(self, event):
-        return super().resizeEvent(event)
+        pass
 
     def scaled(self, val):
         return round(self.scale*val)

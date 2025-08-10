@@ -2,6 +2,9 @@ import os
 os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
 import cv2, time
 
+from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QPalette, QColor, QFont, QImage, QPen
+
+
 from pymavlink import mavutil
 from threading import Thread
 from random import randint
@@ -92,44 +95,7 @@ class MavCom:
 
         elif (time.time() - self.last_heartbeat > 3):
             print(">>> CONNECTION LOST for 3 SEC...")
-
-
-    ## TESTING ##
-    def read_test(self):
-
-
-        if (self.mav_in == None):
-            return
-
-        def exg(inp):
-            return max(0, min(1, 0.5 + (inp-0.5)*1.2))
-
-
-        line = self.fp.readline()
-
-        time.sleep(0.056)
-
-        arr = [float(x) for x in line.split(" ")]
-    
-        self.attitude = (arr[3], arr[4], arr[5])
-        
-        self.heading = arr[6]
-        self.altitude = arr[2] 
-    
-        self.airspeed = arr[1]*0.8
-        
-        self.ground_speed = arr[13]
-        self.vertical_speed = arr[14]
-    
-        self.cont_inputs = list(map(exg, (arr[7], arr[8], arr[9], arr[10])))
-    
-        self.gps_pos = (arr[11], arr[12])
-    
-        self.battery_volt = 0
-        self.battery_per = 0
-    ###########
             
-
 
     def recv_message(self):
 
@@ -215,6 +181,44 @@ class MavCom:
 
 
 
+
+        ## TESTING ##
+    def read_test(self):
+
+
+        if (self.mav_in == None):
+            return
+
+        def exg(inp):
+            return max(0, min(1, 0.5 + (inp-0.5)*1.2))
+
+
+        line = self.fp.readline()
+
+        time.sleep(0.056)
+
+        arr = [float(x) for x in line.split(" ")]
+    
+        self.attitude = (arr[3], arr[4], arr[5])
+        
+        self.heading = arr[6]
+        self.altitude = arr[2] 
+    
+        self.airspeed = arr[1]*0.8
+        
+        self.ground_speed = arr[13]
+        self.vertical_speed = arr[14]
+    
+        self.cont_inputs = list(map(exg, (arr[7], arr[8], arr[9], arr[10])))
+    
+        self.gps_pos = (arr[11], arr[12])
+    
+        self.battery_volt = 0
+        self.battery_per = 0
+    ###########
+
+
+
 class ImageCom:
     def __init__(self, port):
 
@@ -226,6 +230,7 @@ class ImageCom:
         )
 
         self.cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+        #self.test_cap = cv2.VideoCapture("test.mp4")
 
     def get_img(self):
         if (self.cap):
@@ -237,3 +242,17 @@ class ImageCom:
         if self.cap:
             self.cap.release()
             self.cap = None
+
+    def cv2_to_qpixmap(self, cv_img):
+        rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_image.shape
+        bytes_per_line = ch * w
+        q_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+        return QPixmap.fromImage(q_image)
+        
+
+    ## TESTING ##
+    def get_test(self):
+        ret, frame = self.test_cap.read()
+        return frame if ret else None
+    ##############
