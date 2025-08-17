@@ -12,17 +12,15 @@ from util.log import Log
 from util.telem_log import TelemLog
 from const import *
 
-import RPi.GPIO as GPIO
+if (not PC_TEST):
+    import RPi.GPIO as GPIO
 
 
-
+#############################
 
 stop_event = Event()
 
 #############################
-
-is_img_testing = 1
-is_telem_testing = 1
 
 telemetry_data = {}
 gcs_data = {}
@@ -112,7 +110,7 @@ def detect_and_fire():
 ## READ AND SEND IMG
 def read_send_img():
 
-    global img_feed, is_img_testing, video, img_recv, img_send
+    global img_feed, video, img_recv, img_send
 
     while (not stop_event.is_set()):
         try:
@@ -121,7 +119,7 @@ def read_send_img():
                 img_feed = img_recv.recv()
                 
                 if (img_feed is not None):
-                    if (is_img_testing):
+                    if (IMG_TEST):
                         if (video):
                             video.out.write(img_feed)
                     else:
@@ -182,7 +180,7 @@ def read_data():
                 inputs,
                 [], [], 0.01)
 
-            if (mav_com.pixhawk.fd in readable and mav_com.mav_connected):
+            if (mav_com.pixhawk and mav_com.pixhawk.fd in readable and mav_com.mav_connected):
                 msg = mav_com.read_pixhawk()        
                 if (msg):
                     telemetry_data[msg.get_type()] = msg
@@ -265,9 +263,10 @@ def send_data():
 
 def log():
 
-    global read_check, write_check
+    global read_check, write_check, box_data
 
     while (not stop_event.is_set()):
+
         if (signal_lost):
             loggr.print("RC SIGNAL LOST!", 2)
         else:
@@ -285,10 +284,16 @@ def log():
             loggr.raw_print(f" CAM:{read_check[3]} ",
                 1 if (read_check[3]) else 2, "")
             loggr.raw_print("|", 0, "")
+            loggr.raw_print(f" DETECT: {len(box_data)} ",
+                1 if len(box_data) else 2, "")
+            loggr.raw_print("|", 0 , "") 
 
             if telemetry_data.get("RC_CHANNELS"):
-                loggr.raw_print(f" ({telemetry_data.get('RC_CHANNELS').rssi}) ", 3)
-                loggr.raw_print("|", 0, "")
+                loggr.raw_print(f" ({telemetry_data.get('RC_CHANNELS').rssi}) ", 3, "")
+            else:
+                loggr.raw_print(f" ({-1}) ", 3, "")
+
+            loggr.raw_print(" ||", 0)
 
         read_check = [0, 0, 0, 0]
         write_check = [0, 0, 0]
@@ -381,6 +386,21 @@ def write_telem():
 try:
     if __name__ == "__main__":
     
+
+        main_thread = None
+        telemlog_thread = None
+        detect_thread = None
+        send_thread = None
+        recv_thread = None
+        log_thread = None
+
+        pixhawk = None
+        mav_com = None
+        img_recv = None
+        img_send = None
+        p = None
+
+
         #CHECK ARGUMENTS
     
         if len(sys.argv) == 2:
@@ -391,10 +411,10 @@ try:
             MSIP = sys.argv[2]
     
         if len(sys.argv) > 3:
-            is_telem_testing = int(sys.argv[3])
+            TELEM_TEST = int(sys.argv[3])
     
         if len(sys.argv) > 4:
-            is_img_testing = int(sys.argv[4])
+            IMG_TEST = int(sys.argv[4])
     
     
         #>>># START PROCESS
@@ -405,13 +425,16 @@ try:
         ################## START CRITICAL COMPONENTS ##################
     
         ################## START PIXHAWK CONNECTION ##################
-        loggr.print("Starting Pixhawk Connection...", 3)
-        pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
-        loggr.print("Success!\n", 1)
-    
-        loggr.print("Waiting for Pixhawk Hearbeat...", 3)
-        pixhawk.wait_heartbeat()
-        loggr.print("Success!\n", 1)
+        if (not PC_TEST):
+            loggr.print("Starting Pixhawk Connection...", 3)
+            pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
+            loggr.print("Success!\n", 1)
+        
+        
+            loggr.print("Waiting for Pixhawk Hearbeat...", 3)
+            pixhawk.wait_heartbeat()
+            loggr.print("Success!\n", 1)
+            
     
         ################## IMAGE CLASSES ##################
         loggr.print("Starting Detection Model...", 3)
@@ -443,91 +466,81 @@ try:
         mav_com = MavConnect(pixhawk)
         loggr.print("Success!\n", 1)
         
-    
-        ################## START GPIO ##################
-        loggr.print("Starting GPIO...", 3)
-        GPIO.setmode(GPIO.BOARD)
-        GPIO.setup(SERVO_PIN, GPIO.OUT)
-        p = GPIO.PWM(SERVO_PIN, 50)
-        loggr.print("Success!\n", 1)
+        if (not PC_TEST):
+            ################## START GPIO ##################
+            loggr.print("Starting GPIO...", 3)
+            GPIO.setmode(GPIO.BOARD)
+            GPIO.setup(SERVO_PIN, GPIO.OUT)
+            p = GPIO.PWM(SERVO_PIN, 50)
+            loggr.print("Success!\n", 1)
     
     
         ####################################################
-    
-        try:
+        
+        if (not PC_TEST):
             for x in range(ERROR_TRY_COUNT):
-                loggr.print("Opening Camera Stream... [{}]".format((ERROR_TRY_COUNT-x)), 3)
-    
-                if (img_recv.start()):
-                    loggr.print("Success!\n", 1)
-                    break
-                else:
+                try:
+                    loggr.print("Opening Camera Stream... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+        
+                    if (img_recv.start()):
+                        loggr.print("Success!\n", 1)
+                        break
+                    else:
+                        loggr.print("Fail!\n", 2)
+                        img_recv.close()
+                except:
                     loggr.print("Fail!\n", 2)
                     img_recv.close()
-        except:
-            loggr.print("Fail!\n", 2)
-            img_recv.close()
-    
-    
-    
-        try:
+        
+        
             for x in range(ERROR_TRY_COUNT):
-                loggr.print("Starting Gstreamer... [{}]".format((ERROR_TRY_COUNT-x)), 3)
-    
-                if (img_send.start()):
-                    loggr.print("Success!\n", 1)
-                    break
-                else:
+                try:
+                    loggr.print("Starting Gstreamer... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+        
+                    if (img_send.start()):
+                        loggr.print("Success!\n", 1)
+                        break
+                    else:
+                        loggr.print("Fail!\n", 2)
+                        img_send.close()
+                except:
                     loggr.print("Fail!\n", 2)
                     img_send.close()
-        except:
-            loggr.print("Fail!\n", 2)
-            img_send.close()
+        
     
-    
-    
-        try:
-            for x in range(ERROR_TRY_COUNT):
+        for x in range(ERROR_TRY_COUNT):
+            try:
                 loggr.print("Connecting GCS... [{}]".format((ERROR_TRY_COUNT-x)), 3)
                 mav_com.connect_gcs(IP, *(PORTS[0:2]))
                 loggr.print("Success!\n", 1)
                 break
-        except:
-            loggr.print("Fail!\n", 2)
-            mav_com.close_gcs()
+            except:
+                loggr.print("Fail!\n", 2)
+                mav_com.close_gcs()
     
     
-    
-        try:
-            for x in range(ERROR_TRY_COUNT):
+        for x in range(ERROR_TRY_COUNT):
+            try:
                 loggr.print("Connecting Mission Planner... [{}]".format((ERROR_TRY_COUNT-x)), 3)
                 mav_com.connect_sock(MSIP, PORTS[2])
                 loggr.print("Success!\n", 1)
                 break
-        except:
-            loggr.print("Fail!\n", 2)
-            mav_com.close_sock()
+            except:
+                loggr.print("Fail!\n", 2)
+                mav_com.close_sock()
     
-    
-    
-        try:
+        if (not PC_TEST):
             for x in range(ERROR_TRY_COUNT):
-                loggr.print("Starting Servo GPIO... [{}]".format((ERROR_TRY_COUNT-x)), 3)
-                p.start(NET_PWM)
-                loggr.print("Success!\n", 1)
-                break
-        except:
-            loggr.print("Fail!\n", 2)
-    
-        main_thread = None
-        telemlog_thread = None
-        detect_thread = None
-        send_thread = None
-        recv_thread = None
-        log_thread = None
+                try:
+                    loggr.print("Starting Servo GPIO... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+                    p.start(NET_PWM)
+                    loggr.print("Success!\n", 1)
+                    break
+                except:
+                    loggr.print("Fail!\n", 2)
 
 
-        if (is_telem_testing):
+        if (TELEM_TEST):
             loggr.print("Starting with Local Telemetry Logging...", 3)
             telem_logger = TelemLog("telem_log.txt")
             telemlog_thread = Thread(target=write_telem, daemon=False)
@@ -549,7 +562,7 @@ try:
         main_thread.start()
 
         video = None
-        if (is_img_testing):
+        if (IMG_TEST):
             loggr.print("Starting with Local Image Save...", 3)
             video = VideoSave()           
         read_send_img()
@@ -594,6 +607,7 @@ finally:
         p.stop()
         p = None
     
-    GPIO.cleanup()
+    if (not PC_TEST):
+        GPIO.cleanup()
 
     loggr.print("HALTED", 1)

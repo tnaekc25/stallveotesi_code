@@ -8,7 +8,7 @@ class Log:
 		self.start = time.time()
 
 	def print(self, msg, type, end = "\n"):
-		print(f"SYSTEM INFO [{int(time.time()-self.start)}] >>> " + self.codes[type] + msg + "\033[0m", end = end)
+		print(f"SYSTEM INFO [{int(time.time()-self.start)}] >>> " + self.codes[type] + msg + "\033[0m", end = end, flush=True)
 
 	def raw_print(self, msg, type, end = "\n"):
-		print(self.codes[type] + msg + "\033[0m", end = end)
+		print(self.codes[type] + msg + "\033[0m", end = end, flush=True)

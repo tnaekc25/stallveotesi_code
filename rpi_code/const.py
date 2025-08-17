@@ -1,3 +1,4 @@
+
 ############### DELAY CONST ################
 
 DET_WAIT = 0.1
@@ -45,3 +46,7 @@ SIGNAL_TRESHOLD = 10
 ERROR_TRY_COUNT = 3
 
 #############################################
+
+PC_TEST = False
+IMG_TEST = False
+TELEM_TEST = False

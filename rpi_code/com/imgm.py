@@ -1,5 +1,5 @@
 import os, time
-#os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
+os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
 import cv2, numpy as np
 cv2.imshow = lambda *args, **kwargs: None
 
