@@ -14,8 +14,6 @@ class DetectClass:
 		self.fx, self.fy, self.cx, self.cy = fx, fy, cx, cy
 		self.default_pitch = default_pitch
 
-		print("Model is ready...")
-
 	def get_boxes(self, img):
 		return self.model.predict(img, show = False)[0].boxes
 
@@ -25,8 +23,11 @@ class DetectClass:
 		Y = (y - self.cy) / self.fy
 		
 		r_cam = np.array([X, Y, 1.0])
-		r = Rotation.from_euler('xyz', [roll, pitch + self.default_pitch, 0], degrees=True)
-		r_world = r.inv().apply(r_cam)
+		r = Rotation.from_euler('xyz', [pitch + self.default_pitch, roll, 0], degrees=False)
+		r_world = r.apply(r_cam)
+
+		if r_world[2] <= 0:
+			raise ValueError("horizon error")
 
 		t = h / r_world[2]
 

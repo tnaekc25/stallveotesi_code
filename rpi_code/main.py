@@ -83,12 +83,15 @@ def detect_and_fire():
                     # RUN SIMULATION
                     ned = telemetry_data.get("LOCAL_POSITION_NED")
                     hud = telemetry_data.get("VFR_HUD")
+                    attd = telemetry_data.get("ATTITUDE")
         
-                    if (ned and hud):
-
-                        # CALCULATE REAL LIFE DISTANCE
-                        detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                        (box[2] + box[4]) / 2, 0, 0, hud.alt)
+                    if (ned and hud and attd):
+                        try:
+                            # CALCULATE REAL LIFE DISTANCE
+                            detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
+                            (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
+                        except ValueError:
+                            continue
 
                         c = sim.simulate(np.array((0, 0, hud.alt, ned.vx, ned.vy, ned.vz)), MDELAY)
                         x, y, z = c[0:3]
@@ -438,7 +441,7 @@ try:
     
         ################## IMAGE CLASSES ##################
         loggr.print("Starting Detection Model...", 3)
-        img_det = DetectClass("model.pt", 1071, 1071, 320, 240, 0)
+        img_det = DetectClass("model.pt", 1071, 1071, 320, 240, np.pi / 4)
         loggr.print("Success!\n", 1)
     
         loggr.print("Starting Camera Reader Class...", 3)
