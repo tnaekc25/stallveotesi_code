@@ -46,7 +46,7 @@ detection_count = [0, 0]
 
 
 def activate_mech(num):
-    global detection_count
+    global detection_count, is_det
 
     if (num):
         if (detection_count[1] < REQUIRED_DETECTION_COUNT):
@@ -74,7 +74,8 @@ def detect_and_fire():
 
     while (not stop_event.is_set()):
         try:
-            if (is_det and (img_feed) is not None):
+            if (is_det and (img_feed) is not None and
+             (detection_count[0] <= REQUIRED_DETECTION_COUNT or detection_count[1] <= REQUIRED_DETECTION_COUNT)):
                 raw_box_data = img_det.get_boxes(img_feed)
                 box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
 
