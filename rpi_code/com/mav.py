@@ -161,3 +161,7 @@ class MavConnect:
             mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
             mode_id
         )
+
+    def add_waypoint(self, lat, lon, alt, speed, head):
+        #TODO
+        return
