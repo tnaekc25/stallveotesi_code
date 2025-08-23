@@ -25,6 +25,11 @@ class RocketSimulation:
 		return last
 
 
+	def revsim(self, detx, dety, alt, speed, head, delay):
+		#TODO
+		return 0, 0, 0
+
+
 	def _norm(self, arr):
 		n = np.linalg.norm(arr)
 		return arr/n if n else np.array((0, 0, 0))
