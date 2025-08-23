@@ -39,41 +39,49 @@ signal_lost = False
 #############################
 
 firing_lock = Lock()
+detection_lock = Lock()
+
 detection_count = [0, 0]
 last_detect = [-1, -1]
+shoot_pos = [None, None]
+
 
 #############################
 
 
+def pos_fire():
+    global shoot_pos
 
-def activate_mech(num):
-    global detection_count, last_detect
+    while (not stop_event.is_set()):
+        try:
+            gps = telemetry_data.get("GLOBAL_POSITION_INT")
 
-    idx = 1 if num else 0
-    pwm_value = MAX_PWM if num else MIN_PWM
+            if (gps):
 
-    if last_detect[idx] >= 0 and (time.time() - last_detect[idx]) > DETECTION_TIMEOUT:
-        detection_count[idx] = 0
+                lat = gps.lat / 1e7
+                lon = gps.lon / 1e7
 
-    if detection_count[idx] < REQUIRED_DETECTION_COUNT:
-        detection_count[idx] += 1
-        last_detect[idx] = time.time()
+                for i in range(2):
+                    if (shoot_pos[i]):
+                        with detection_lock:
+                            if (time.time()-shoot_pos[i][2] > SHOOT_COOLDOWN):
+                                if (abs(lat - shoot_pos[i][0]) < MAX_SHOOT_DIST
+                                    and abs(lon - shoot_pos[i][1]) < MAX_SHOOT_DIST):
+                                        p.ChangeDutyCycle(MAX_PWM if i else MIN_PWM)
+                                        shoot_pos[i] = None
 
-    elif detection_count[idx] == REQUIRED_DETECTION_COUNT:
-        detection_count[idx] += 1
-        p.ChangeDutyCycle(pwm_value)
-        last_detect[idx] = -1
-
+            time.sleep(SHOOT_WAIT)
+        
+        except Exception as e:
+            loggr.print("ERROR AT THREAD -1 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
 
 
 
 ## APPLY OBJECT DETECTION AND RUN SIMULATION
-def detect_and_fire():
+def detect_and_set():
 
-    global box_data, telemetry_data
-
-    detection_count1 = 0
-    detection_count2 = 0
+    global box_data, telemetry_data, detection_count, last_detect
 
     while (not stop_event.is_set()):
         try:
@@ -82,30 +90,43 @@ def detect_and_fire():
                 raw_box_data = img_det.get_boxes(img_feed)
                 box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
 
+
                 for box in box_data:
+                    clss = 1 if box[0] else 0
+                
+                    if last_detect[clss] >= 0 and (time.time() - last_detect[clss]) > DETECTION_TIMEOUT:
+                        detection_count[clss] = 0
+                
+                    if detection_count[clss] < REQUIRED_DETECTION_COUNT:
+                        detection_count[clss] += 1
+                        last_detect[clss] = time.time()
+                
+                    elif detection_count[clss] == REQUIRED_DETECTION_COUNT:
+                        detection_count[clss] += 1
+                        last_detect[clss] = -1
 
-                    # RUN SIMULATION
-                    ned = telemetry_data.get("LOCAL_POSITION_NED")
-                    hud = telemetry_data.get("VFR_HUD")
-                    attd = telemetry_data.get("ATTITUDE")
+                        with detection_lock: 
+                            hud = telemetry_data.get("VFR_HUD")
+                            attd = telemetry_data.get("ATTITUDE")
+                            gps = telemetry_data.get("GLOBAL_POSITION_INT")
         
-                    if (ned and hud and attd):
-                        try:
-                            # CALCULATE REAL LIFE DISTANCE
-                            detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                            (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
-                        except ValueError:
-                            continue
+                            if (hud and attd and gps):
+                                try:
+                                    detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
+                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
+                                except ValueError as e:
+                                    loggr.print(e, 2)
+                                    continue
 
-                        c = sim.simulate(np.array((0, 0, hud.alt, ned.vx, ned.vy, ned.vz)), MDELAY)
-                        x, y, z = c[0:3]
+                                c = sim.revsim(detx, dety, 
+                                    HIT_ALTITUDE, HIT_AIRSPEED, HIT_DIRECTION, MDELAY)
+                                sx, sy, _ = c[0:3]
 
-                        clss = box[0]
+                                lat, lon = img_det.pos_to_gps(gps, hud, sx, sy)
+                                mav_com.add_waypoint(lat, lon, HIT_ALTITUDE, HIT_AIRSPEED, HIT_DIRECTION)
 
-                        with firing_lock:
-                            if (abs(detx-x) < MAX_DIST and abs(dety-y) < MAX_DIST):
-                                loggr.print("AUTO ACTIVATE MECHANISM >> ", clss, 3)
-                                activate_mech(clss)
+                                shoot_pos[clss] = (lat, lon, time.time())
+
 
             time.sleep(DET_WAIT)
         
@@ -553,8 +574,11 @@ try:
             telemlog_thread = Thread(target=write_telem, daemon=False)
             telemlog_thread.start()
         else:
-            detect_thread = Thread(target=detect_and_fire, daemon=False)
+            detect_thread = Thread(target=detect_and_set, daemon=False)
             detect_thread.start()
+
+            fire_thread = Thread(target=pos_fire, daemon=False)
+            fire_thread.start()
     
         send_thread = Thread(target=send_data, daemon=False)
         send_thread.start()
@@ -590,6 +614,8 @@ finally:
         telemlog_thread.join()
     if (detect_thread):
         detect_thread.join()
+    if (fire_thread):
+        fire_thread.join()
     if (send_thread):
         send_thread.join()
     if (recv_thread):

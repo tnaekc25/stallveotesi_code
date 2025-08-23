@@ -36,6 +36,19 @@ class DetectClass:
 	
 		return dx, dy
 
+	def pos_to_gps(self, gps, hud, x, y):
+		head = hud.heading
+		lat0 = gps.lat / 1e7
+		lon0 = gps.lon / 1e7
+
+		theta = np.radians(head)
+		dNorth = y * np.cos(theta) - x * np.sin(theta)
+		dEast  = y * np.sin(theta) + x * np.cos(theta)
+
+		lat = lat0 + (dNorth / R) * 180 / np.pi
+		lon = lon0 + (dEast / (R * np.cos(np.pi * lat0 / 180))) * 180 / np.pi
+
+		return lat, lon
 
 
 

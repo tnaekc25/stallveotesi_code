@@ -2,6 +2,7 @@
 ############### DELAY CONST ################
 
 DET_WAIT = 0.1
+SHOOT_WAIT = 0.1
 MAIN_WAIT = 0.1
 SEND_WAIT = 0.1
 IMG_WAIT = 0.03
@@ -15,7 +16,11 @@ FAILSAFE_ACTIVE = False
 
 ############################################
 
+HIT_ALTITUDE = 10000
+HIT_AIRSPEED = 10
+HIT_DIRECTION = 270
 
+R = 6378137.0
 
 ############## NETWORK CONST ###############
 
@@ -36,7 +41,8 @@ SERVO_PIN = 12
 
 REQUIRED_DETECTION_COUNT = 3
 DETECTION_TIMEOUT = 3
-MAX_DIST = 2
+MAX_SHOOT_DIST = 0.01
+SHOOT_COOLDOWN = 5
 
 #############################################
 
