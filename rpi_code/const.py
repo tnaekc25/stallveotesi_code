@@ -35,6 +35,7 @@ MDELAY = 1
 SERVO_PIN = 12
 
 REQUIRED_DETECTION_COUNT = 3
+DETECTION_TIMEOUT = 3
 MAX_DIST = 2
 
 #############################################

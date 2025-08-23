@@ -40,26 +40,29 @@ signal_lost = False
 
 firing_lock = Lock()
 detection_count = [0, 0]
+last_detect = [-1, -1]
 
 #############################
 
 
 
 def activate_mech(num):
-    global detection_count, is_det
+    global detection_count, last_detect
 
-    if (num):
-        if (detection_count[1] < REQUIRED_DETECTION_COUNT):
-            detection_count[1] += 1
-        elif (detection_count[1] == REQUIRED_DETECTION_COUNT):
-            detection_count[1] += 1
-            p.ChangeDutyCycle(MAX_PWM)
-    else:
-        if (detection_count[0] < REQUIRED_DETECTION_COUNT):
-            detection_count[0] += 1
-        elif (detection_count[0] == REQUIRED_DETECTION_COUNT):
-            detection_count[0] += 1
-            p.ChangeDutyCycle(MIN_PWM)
+    idx = 1 if num else 0
+    pwm_value = MAX_PWM if num else MIN_PWM
+
+    if last_detect[idx] >= 0 and (time.time() - last_detect[idx]) > DETECTION_TIMEOUT:
+        detection_count[idx] = 0
+
+    if detection_count[idx] < REQUIRED_DETECTION_COUNT:
+        detection_count[idx] += 1
+        last_detect[idx] = time.time()
+
+    elif detection_count[idx] == REQUIRED_DETECTION_COUNT:
+        detection_count[idx] += 1
+        p.ChangeDutyCycle(pwm_value)
+        last_detect[idx] = -1
 
 
 
@@ -319,7 +322,7 @@ def mainloop():
             if (FAILSAFE_ACTIVE):
                 if telemetry_data.get("RC_CHANNELS") and telemetry_data.get("RC_CHANNELS").rssi < SIGNAL_TRESHOLD:
                     if (lost_start >= 0 and time.time() - lost_start > FAILSAFE_DELAY):
-                        #mav_com.send_fail()
+                        mav_com.send_fail()
                         loggr.print(" >>> FAIL SAFE <<< ", 2)            
                     else:
                         signal_lost = True
