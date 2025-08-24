@@ -49,37 +49,9 @@ shoot_pos = [None, None]
 #############################
 
 
-def pos_fire():
-    global shoot_pos
 
-    while (not stop_event.is_set()):
-        try:
-            gps = telemetry_data.get("GLOBAL_POSITION_INT")
-
-            if (gps):
-
-                lat = gps.lat / 1e7
-                lon = gps.lon / 1e7
-
-                for i in range(2):
-                    if (shoot_pos[i]):
-                        with detection_lock:
-                            if (time.time()-shoot_pos[i][2] > SHOOT_COOLDOWN):
-                                if (abs(lat - shoot_pos[i][0]) < MAX_SHOOT_DIST
-                                    and abs(lon - shoot_pos[i][1]) < MAX_SHOOT_DIST):
-                                        p.ChangeDutyCycle(MAX_PWM if i else MIN_PWM)
-                                        shoot_pos[i] = None
-
-            time.sleep(SHOOT_WAIT)
-        
-        except Exception as e:
-            loggr.print("ERROR AT THREAD -1 " + str(e), 2)
-            time.sleep(ERROR_WAIT)
-
-
-
-## APPLY OBJECT DETECTION AND RUN SIMULATION
-def detect_and_set():
+## APPLY OBJECT DETECTION AND RUN SIMULATION AND FIRE
+def detect_and_fire():
 
     global box_data, telemetry_data, detection_count, last_detect
 
@@ -102,15 +74,16 @@ def detect_and_set():
                         last_detect[clss] = time.time()
                 
                     elif detection_count[clss] == REQUIRED_DETECTION_COUNT:
-                        detection_count[clss] += 1
-                        last_detect[clss] = -1
-
                         with detection_lock: 
                             hud = telemetry_data.get("VFR_HUD")
                             attd = telemetry_data.get("ATTITUDE")
                             gps = telemetry_data.get("GLOBAL_POSITION_INT")
-        
+                            
                             if (hud and attd and gps):
+
+                                detection_count[clss] += 1
+                                last_detect[clss] = -1
+
                                 try:
                                     detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
                                     (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
@@ -126,6 +99,23 @@ def detect_and_set():
                                 mav_com.add_waypoint(lat, lon, HIT_ALTITUDE, HIT_AIRSPEED, HIT_DIRECTION)
 
                                 shoot_pos[clss] = (lat, lon, time.time())
+
+
+                    elif detection_count[clss] > REQUIRED_DETECTION_COUNT:
+                        if (shoot_pos[clss]):
+                            gps = telemetry_data.get("GLOBAL_POSITION_INT")
+
+                            if (gps):
+                                lat = gps.lat / 1e7
+                                lon = gps.lon / 1e7
+
+                                if (shoot_pos[clss]):
+                                    if (time.time()-shoot_pos[clss][2] > SHOOT_COOLDOWN):
+                                        with detection_lock:
+                                            if (abs(lat - shoot_pos[clss][0]) < MAX_SHOOT_DIST
+                                                and abs(lon - shoot_pos[clss][1]) < MAX_SHOOT_DIST):
+                                                    p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                                                    shoot_pos[clss] = None
 
 
             time.sleep(DET_WAIT)
@@ -574,11 +564,8 @@ try:
             telemlog_thread = Thread(target=write_telem, daemon=False)
             telemlog_thread.start()
         else:
-            detect_thread = Thread(target=detect_and_set, daemon=False)
+            detect_thread = Thread(target=detect_and_fire, daemon=False)
             detect_thread.start()
-
-            fire_thread = Thread(target=pos_fire, daemon=False)
-            fire_thread.start()
     
         send_thread = Thread(target=send_data, daemon=False)
         send_thread.start()
@@ -614,8 +601,6 @@ finally:
         telemlog_thread.join()
     if (detect_thread):
         detect_thread.join()
-    if (fire_thread):
-        fire_thread.join()
     if (send_thread):
         send_thread.join()
     if (recv_thread):
