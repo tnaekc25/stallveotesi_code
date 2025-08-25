@@ -96,7 +96,7 @@ def detect_and_fire():
                                     c = sim.revsim(detx, dety, 
                                         HIT_ALTITUDE, HIT_AIRSPEED, 0, MDELAY)
                                     sx, sy = c[0:2]
-                                except RuntimeError as e
+                                except RuntimeError as e:
                                     loggr.print(e, 2)
                                     continue
 
