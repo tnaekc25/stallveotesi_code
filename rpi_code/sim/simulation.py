@@ -1,5 +1,9 @@
 
 import numpy as np
+from scipy.optimize import root
+
+from rocket import RocketModel
+from envr import EnvironmentModel
 
 class RocketSimulation:
 
@@ -23,11 +27,6 @@ class RocketSimulation:
 			last = last + (self._stepf(last) + self._stepf(zp))*self.dt/2.0
 
 		return last
-
-
-	def revsim(self, detx, dety, alt, speed, head, delay):
-		#TODO
-		return 0, 0, 0
 
 
 	def _norm(self, arr):
@@ -63,3 +62,25 @@ class RocketSimulation:
 		 np.array((0, 0, -self.envr.g))) # calculate accel
 
 		return np.array((vx, vy, vz, ax, ay, az))
+
+
+	def revsim(self, detx, dety, alt, speed, delay):
+
+		vx = 0
+		vy = speed
+
+		def residual(pos):
+			x0, y0 = pos
+			z0 = np.array([x0, y0, alt, vx, vy, 0])
+			last = self.simulate(z0, delay)
+			return [last[0] - detx, last[1] - dety]
+
+		guess = [detx, dety]
+
+		sol = root(residual, guess)
+
+		if not sol.success:
+		 raise RuntimeError("revsim failed to converge")
+
+		x0, y0 = sol.x
+		return x0, y0

@@ -163,5 +163,62 @@ class MavConnect:
         )
 
     def add_waypoint(self, lat, lon, alt, speed, head):
-        #TODO
-        return
+        mission_items = []
+        
+        self.pixhawk.mav.mission_request_list_send(self.pixhawk.target_system, self.pixhawk.target_component)
+        count_msg = self.pixhawk.recv_match(type='MISSION_COUNT', blocking=True, timeout=2)
+        mission_count = count_msg.count if count_msg else 0
+        
+        for _ in range(mission_count):
+            msg = self.pixhawk.recv_match(type='MISSION_ITEM', blocking=True, timeout=2)
+            if msg:
+                mission_items.append(msg)
+        
+        seq_base = len(mission_items)
+        
+        speed_cmd = mavutil.mavlink.MAVLink_mission_item_message(
+            target_system=self.pixhawk.target_system,
+            target_component=self.pixhawk.target_component,
+            seq=seq_base,
+            frame=mavutil.mavlink.MAV_FRAME_MISSION,
+            command=mavutil.mavlink.MAV_CMD_DO_CHANGE_SPEED,
+            current=0,
+            autocontinue=1,
+            param1=0,
+            param2=speed,
+            param3=-1,
+            param4=0,
+            x=0, y=0, z=0
+        )
+        
+        waypoint_cmd = mavutil.mavlink.MAVLink_mission_item_message(
+            target_system=self.pixhawk.target_system,
+            target_component=self.pixhawk.target_component,
+            seq=seq_base + 1,
+            frame=mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+            command=mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
+            current=0,
+            autocontinue=1,
+            param1=0, param2=0, param3=0, param4=head,
+            x=lat, y=lon, z=alt
+        )
+        
+        mission_items.append(speed_cmd)
+        mission_items.append(waypoint_cmd)
+        
+        for i, wp in enumerate(mission_items):
+            wp.seq = i
+        
+        self.pixhawk.mav.mission_count_send(
+            self.pixhawk.target_system, 
+            self.pixhawk.target_component, 
+            len(mission_items)
+        )
+        
+        for wp in mission_items:
+            self.pixhawk.mav.send(wp)
+            time.sleep(0.05)
+        
+        ack = self.pixhawk.recv_match(type='MISSION_ACK', blocking=True, timeout=5)
+        if not ack:
+            raise RuntimeError("Mission upload failed: no ACK received")    
