@@ -477,7 +477,7 @@ try:
     
         ################## IMAGE CLASSES ##################
         loggr.print("Starting Detection Model...", 3)
-        img_det = DetectClass("model.pt", 1071, 1071, 320, 240, np.pi / 4)
+        img_det = DetectClass("model.pt", 663, 663, 320, 240, np.pi / 4)
         loggr.print("Success!\n", 1)
     
         loggr.print("Starting Camera Reader Class...", 3)
