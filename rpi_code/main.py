@@ -118,7 +118,10 @@ def detect_and_fire():
                                     lat = gps.lat / 1e7
                                     lon = gps.lon / 1e7
     
-                                    if (time.time()-shoot_pos[clss][2] > SHOOT_COOLDOWN and hud and attd):
+                                    if (time.time()-shoot_pos[clss][2] > SHOOT_COOLDOWN and
+                                        abs(lat - shoot_pos[clss][0]) < MAX_SHOOT_DIST and 
+                                        abs(lon - shoot_pos[clss][1]) < MAX_SHOOT_DIST):
+                                        
                                         try:
                                             detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
                                                 (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
@@ -128,9 +131,7 @@ def detect_and_fire():
                                         c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
                                         hx, hy = c[0:2]
     
-                                        if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST and
-                                            abs(lat - shoot_pos[clss][0]) < MAX_SHOOT_DIST and 
-                                            abs(lon - shoot_pos[clss][1]) < MAX_SHOOT_DIST):
+                                        if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
                                             p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
                                             shoot_pos[clss] = None
 
