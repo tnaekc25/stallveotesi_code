@@ -2,8 +2,8 @@
 import numpy as np
 from scipy.optimize import root
 
-from rocket import RocketModel
-from envr import EnvironmentModel
+from sim.rocket import RocketModel
+from sim.envr import EnvironmentModel
 
 class RocketSimulation:
 
