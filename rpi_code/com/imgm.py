@@ -37,18 +37,30 @@ class DetectClass:
 		return dx, dy
 
 	def pos_to_gps(self, gps, hud, x, y):
+		a = 6378137.0
+		b = 6356752.314245 
+		e2 = 1 - (b*b)/(a*a)
+		
 		head = hud.heading
 		lat0 = gps.lat / 1e7
 		lon0 = gps.lon / 1e7
+
+		lat_rad = np.radians(lat0)
 
 		theta = np.radians(head)
 		dNorth = y * np.cos(theta) - x * np.sin(theta)
 		dEast  = y * np.sin(theta) + x * np.cos(theta)
 
-		lat = lat0 + (dNorth / R) * 180 / np.pi
-		lon = lon0 + (dEast / (R * np.cos(np.pi * lat0 / 180))) * 180 / np.pi
+		M = a * (1 - e2) / ((1 - e2 * (np.sin(lat_rad)**2))**1.5)
+		N = a / np.sqrt(1 - e2 * (np.sin(lat_rad)**2))
+		
+		dphi = dNorth / M
+		dlambda = dEast / (N * np.cos(lat_rad))
+		
+		new_lat = lat_rad + dphi
+		new_lon = np.radians(lon0) + dlambda
 
-		return lat, lon
+		return np.degrees(new_lat), np.degrees(new_lon)
 
 
 
@@ -126,3 +138,4 @@ class VideoSave:
 		self.out = cv2.VideoWriter("output.avi", fourcc, 20.0, (640, 480))
 
 		
+

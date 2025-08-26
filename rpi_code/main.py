@@ -93,9 +93,8 @@ def detect_and_fire():
                                     continue
 
                                 try:
-                                    c = sim.revsim(detx, dety, 
-                                        HIT_ALTITUDE, HIT_AIRSPEED, 0, MDELAY)
-                                    sx, sy = c[0:2]
+                                    sx, sy = sim.revsim(detx, dety, 
+                                        HIT_ALTITUDE, HIT_AIRSPEED, MDELAY)
                                 except RuntimeError as e:
                                     loggr.print(e, 2)
                                     continue
@@ -119,22 +118,21 @@ def detect_and_fire():
                                     lat = gps.lat / 1e7
                                     lon = gps.lon / 1e7
     
-                                    if (shoot_pos[clss]):
-                                        if (time.time()-shoot_pos[clss][2] > SHOOT_COOLDOWN and hud and attd):
-                                                try:
-                                                    detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                                        (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
-                                                except ValueError:
-                                                    continue
+                                    if (time.time()-shoot_pos[clss][2] > SHOOT_COOLDOWN and hud and attd):
+                                        try:
+                                            detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
+                                                (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
+                                        except ValueError:
+                                            continue
                                             
-                                                c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
-                                                hx, hy = c[0:2]
+                                        c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
+                                        hx, hy = c[0:2]
     
-                                                if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST and
-                                                    abs(lat - shoot_pos[clss][0]) < MAX_SHOOT_DIST and 
-                                                    abs(lon - shoot_pos[clss][1]) < MAX_SHOOT_DIST):
-                                                    p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
-                                                    shoot_pos[clss] = None
+                                        if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST and
+                                            abs(lat - shoot_pos[clss][0]) < MAX_SHOOT_DIST and 
+                                            abs(lon - shoot_pos[clss][1]) < MAX_SHOOT_DIST):
+                                            p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                                            shoot_pos[clss] = None
 
 
             time.sleep(DET_WAIT)

@@ -84,3 +84,15 @@ class RocketSimulation:
 
 		x0, y0 = sol.x
 		return x0, y0
+
+
+
+#m/s^2, kg/m^3 -> by meter
+envr = EnvironmentModel(grav = 9.81, ro_path = "", wind_path = "") 
+#kg, kg.m^2, m, m^2, coef of drag -> by velocity
+rocket = RocketModel(mass = 241, carea = 0.06, cd_path = "") 
+sim = RocketSimulation(dt = 0.1, rocket = rocket, envr = envr)
+
+x, y = sim.revsim(0, 200, 10000, 20, 3)
+print(x, y)
+print(list(map(int, sim.simulate(np.array([x, y, 10000, 0, 20, 0]), 3))))
