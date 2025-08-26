@@ -332,6 +332,24 @@ def log():
             else:
                 loggr.raw_print(f" ({-1}) ", 3, "")
 
+
+            loggr.raw_print(f" POS:", 3, "")
+
+            if (shoot_pos[0]):
+                loggr.raw_print(shoot_pos[0][0] + " " + shoot_pos[0][1], 1, "")
+            else:
+                loggr.raw_print("NONE", 2, "")
+            
+            loggr.raw_print("/", 0 , "") 
+
+            if (shoot_pos[1]):
+                loggr.raw_print(shoot_pos[1][0] + " " + shoot_pos[1][1], 1, "")
+            else:
+                loggr.raw_print("NONE", 2, "")
+
+            loggr.raw_print("|", 0 , "") 
+
+
             loggr.raw_print(" ||", 0)
 
         read_check = [0, 0, 0, 0]
