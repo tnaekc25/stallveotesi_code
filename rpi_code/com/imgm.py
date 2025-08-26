@@ -34,13 +34,13 @@ class DetectClass:
 		ground_point = t * r_world
 		dx, dy = ground_point[0], ground_point[1]
 	
-		return dx, dy
+		return dx, -dy
 
 	def pos_to_gps(self, gps, hud, x, y):
 		a = 6378137.0
 		b = 6356752.314245 
 		e2 = 1 - (b*b)/(a*a)
-		
+
 		head = hud.heading
 		lat0 = gps.lat / 1e7
 		lon0 = gps.lon / 1e7
