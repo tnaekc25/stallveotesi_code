@@ -77,7 +77,7 @@ class RecvClass:
 
 	def recv(self):
 		ret, frame = self.cap.read()
-		return frame if ret else None
+		return cv2.flip(frame, 0) if ret else None
 
 	def close(self):
 		if (self.cap):
