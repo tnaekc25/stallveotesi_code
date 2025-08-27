@@ -153,12 +153,12 @@ class MavCom:
                 elif len(recvd) > 7:
                     if recvd[0:7] == "STATINF":
                         spltted = list(recvd[7:])
-                        if (len(spltted) == 4):
-                            self.is_armed = spltted[0] == '1'
-                            self.control_mode = spltted[1] == '1'
-                            self.left_stat = spltted[2] == '1'
-                            self.right_stat = spltted[3] == '1'
-                            self.is_det = spltted[4] == '1'
+                        if (len(spltted) > 4):
+                            self.is_armed = (spltted[0] == '1')
+                            self.control_mode = (spltted[1] == '1')
+                            self.left_stat = (spltted[2] == '1')
+                            self.right_stat = (spltted[3] == '1')
+                            self.is_det = (spltted[4] == '1')
 
             return 1
 

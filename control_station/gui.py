@@ -19,7 +19,7 @@ from cscom import MavCom, ImageCom
 os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0' 
 
 upimg = None
-IP = "10.239.207.118" 
+IP = "10.99.103.118" 
 PORT1 = 14550 
 PORT2 = 14551
 
@@ -245,10 +245,10 @@ class BottomWidget(ImageWidget):
 
         if com.is_det and self.detection_on.name != "src/connected.png":
             self.detection_on.setImgbyName("src/connected.png")
-            self.connected_img.repaint()
-        elif not com.connected and self.detection_on.name != "src/not_connected.png":
+            self.detection_on.repaint()
+        elif not com.is_det and self.detection_on.name != "src/not_connected.png":
             self.detection_on.setImgbyName("src/not_connected.png")
-            self.connected_img.repaint()
+            self.detection_on.repaint()
 
     
         if abs(com.airspeed - self.prev_vals["airspeed"]) > 0.1:
