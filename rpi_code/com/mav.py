@@ -148,7 +148,7 @@ class MavConnect:
             if ack.result != mavutil.mavlink.MAV_RESULT_ACCEPTED:
                 return False
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         
         self.pixhawk.mav.set_mode_send(
             self.pixhawk.target_system,
