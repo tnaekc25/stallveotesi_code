@@ -1,5 +1,5 @@
 import os, time
-os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
+#os.add_dll_directory("C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\bin")
 import cv2, numpy as np
 cv2.imshow = lambda *args, **kwargs: None
 
@@ -15,7 +15,7 @@ class DetectClass:
 		self.default_pitch = default_pitch
 
 	def get_boxes(self, img):
-		return self.model.predict(img, show = False)[0].boxes
+		return self.model.predict(img, conf=0.8, show = False)[0].boxes
 
 	def get_distance(self, x, y, roll, pitch, h):
 		

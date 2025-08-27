@@ -113,7 +113,7 @@ class MavConnect:
 
 
 
-    def is_armed(self, heartbeat):
+    def check_armed(self, heartbeat):
         if heartbeat:
             return (heartbeat.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED) != 0
         return False
@@ -128,18 +128,19 @@ class MavConnect:
 
 
     def toggle_arm(self, heartbeat):
-        if (heartbeat == False):
+        if (not heartbeat):
             return
 
-        self.is_armed = (not self.is_armed(heartbeat))
+        self.is_armed = (not self.check_armed(heartbeat))
 
         self.pixhawk.mav.command_long_send(
             self.pixhawk.target_system,
             self.pixhawk.target_component,
             mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
             0,
-            self.is_armed,
-            0, 0, 0, 0, 0, 0)
+            1,
+            0, 0, 0, 0, 0, 0
+        )
 
 
 
@@ -162,63 +163,21 @@ class MavConnect:
             mode_id
         )
 
-    def add_waypoint(self, lat, lon, alt, speed, head):
-        mission_items = []
-        
-        self.pixhawk.mav.mission_request_list_send(self.pixhawk.target_system, self.pixhawk.target_component)
-        count_msg = self.pixhawk.recv_match(type='MISSION_COUNT', blocking=True, timeout=2)
-        mission_count = count_msg.count if count_msg else 0
-        
-        for _ in range(mission_count):
-            msg = self.pixhawk.recv_match(type='MISSION_ITEM', blocking=True, timeout=2)
-            if msg:
-                mission_items.append(msg)
-        
-        seq_base = len(mission_items)
-        
-        speed_cmd = mavutil.mavlink.MAVLink_mission_item_message(
-            target_system=self.pixhawk.target_system,
-            target_component=self.pixhawk.target_component,
-            seq=seq_base,
-            frame=mavutil.mavlink.MAV_FRAME_MISSION,
-            command=mavutil.mavlink.MAV_CMD_DO_CHANGE_SPEED,
-            current=0,
-            autocontinue=1,
-            param1=0,
-            param2=speed,
-            param3=-1,
-            param4=0,
-            x=0, y=0, z=0
+    def go_waypoint(self, lat, lon, alt, speed, head):
+        self.pixhawk.mav.command_long_send(
+            self.target_system,
+            self.target_component,
+            mavutil.mavlink.MAV_CMD_DO_REPOSITION,
+            0,
+            speed,
+            0,
+            head,
+            lat,
+            lon,
+            alt
         )
-        
-        waypoint_cmd = mavutil.mavlink.MAVLink_mission_item_message(
-            target_system=self.pixhawk.target_system,
-            target_component=self.pixhawk.target_component,
-            seq=seq_base + 1,
-            frame=mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-            command=mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
-            current=0,
-            autocontinue=1,
-            param1=0, param2=0, param3=0, param4=head,
-            x=lat, y=lon, z=alt
-        )
-        
-        mission_items.append(speed_cmd)
-        mission_items.append(waypoint_cmd)
-        
-        for i, wp in enumerate(mission_items):
-            wp.seq = i
-        
-        self.pixhawk.mav.mission_count_send(
-            self.pixhawk.target_system, 
-            self.pixhawk.target_component, 
-            len(mission_items)
-        )
-        
-        for wp in mission_items:
-            self.pixhawk.mav.send(wp)
-            time.sleep(0.05)
-        
-        ack = self.pixhawk.recv_match(type='MISSION_ACK', blocking=True, timeout=5)
-        if not ack:
-            raise RuntimeError("Mission upload failed: no ACK received")    
+
+        msg = self.pixhawk.recv_match(type='COMMAND_ACK', blocking=True, timeout=0.5)
+        if msg and msg.command == mavutil.mavlink.MAV_CMD_DO_REPOSITION:
+            return True
+        return False

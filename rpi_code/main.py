@@ -35,12 +35,14 @@ read_check = [0, 0, 0, 0]
 write_check = [0, 0, 0]
 
 signal_lost = False
+lost_start = -1
 
 #############################
 
 firing_lock = Lock()
 detection_lock = Lock()
-comm_lock = Lock()
+comm_lock1 = Lock()
+comm_lock2 = Lock()
 
 detection_count = [0, 0]
 last_detect = [-1, -1]
@@ -55,6 +57,8 @@ shoot_pos = [None, None]
 def detect_and_fire():
 
     global box_data, telemetry_data, detection_count, last_detect
+
+    headed = False
 
     while (not stop_event.is_set()):
         try:
@@ -89,51 +93,65 @@ def detect_and_fire():
                                     detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
                                     (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
                                 except ValueError as e:
-                                    loggr.print(e, 2)
                                     continue
 
                                 try:
                                     sx, sy = sim.revsim(detx, dety, 
                                         HIT_ALTITUDE, HIT_AIRSPEED, MDELAY)
                                 except RuntimeError as e:
-                                    loggr.print(e, 2)
                                     continue
 
                                 lat, lon = img_det.pos_to_gps(gps, hud, sx, sy)
 
-                                with comm_lock:
-                                    mav_com.add_waypoint(lat, lon, HIT_ALTITUDE, HIT_AIRSPEED, hud.heading)
-
-                                shoot_pos[clss] = (lat, lon, time.time())
+                                shoot_pos[clss] = (lat, lon, gps.lat / 1e7, gps.lon / 1e7, hud.heading, time.time())
 
 
                     elif detection_count[clss] > REQUIRED_DETECTION_COUNT:
                         with detection_lock:
                             if (shoot_pos[clss]):
-                                hud = telemetry_data.get("VFR_HUD")
-                                attd = telemetry_data.get("ATTITUDE")
-                                gps = telemetry_data.get("GLOBAL_POSITION_INT")
-                                
-                                if (hud and attd and gps):
-                                    lat = gps.lat / 1e7
-                                    lon = gps.lon / 1e7
+                                if (time.time()-shoot_pos[clss][5] > SHOOT_COOLDOWN):
+
+                                    # CHECK TO FIRE
+                                    if (headed):
+                                        hud = telemetry_data.get("VFR_HUD")
+                                        attd = telemetry_data.get("ATTITUDE")
+                                    
+                                        if (hud and attd):
+                                            try:
+                                                detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
+                                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
+                                            except ValueError:
+                                                continue
+                                                
+                                            c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
+                                            hx, hy = c[0:2]
+            
+                                            if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
+                                                with firing_lock:
+                                                    p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
     
-                                    if (time.time()-shoot_pos[clss][2] > SHOOT_COOLDOWN and
-                                        abs(lat - shoot_pos[clss][0]) < MAX_SHOOT_DIST and 
-                                        abs(lon - shoot_pos[clss][1]) < MAX_SHOOT_DIST):
-                                        
-                                        try:
-                                            detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                                (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
-                                        except ValueError:
-                                            continue
-                                            
-                                        c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
-                                        hx, hy = c[0:2]
+                                                headed = False
+                                                shoot_pos[clss] = None
+
+                                    # CHECK TO GO WAYPOINT
+                                    else:
+                                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
+
+                                        if (gps):
+                                            lat = gps.lat / 1e7
+                                            lon = gps.lon / 1e7
+
+                                            tolat = shoot_pos[clss][0]
+                                            tolon = shoot_pos[clss][1]
     
-                                        if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
-                                            p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
-                                            shoot_pos[clss] = None
+                                            if (abs(lat - shoot_pos[clss][2]) < MAX_SHOOT_DIST and 
+                                                abs(lon - shoot_pos[clss][3]) < MAX_SHOOT_DIST):
+                                                with comm_lock1, comm_lock2:
+                                                    while True:
+                                                        if (mav_com.go_waypoint(tolat, tolon, HIT_ALTITUDE,
+                                                         HIT_AIRSPEED, shoot_pos[clss][4])):
+                                                            break
+                                                    headed = True
 
 
             time.sleep(DET_WAIT)
@@ -174,13 +192,12 @@ def read_send_img():
 
 ## READ TELEMETRY FROM PIXHAWK AND DATA FROM GCS
 def read_data():
-    global telemetry_data, gcs_data
+    global telemetry_data, lost_start
 
     while (not stop_event.is_set()):
         try:
 
-            with comm_lock:
-
+            with comm_lock2:
                 inputs = []
     
                 try:
@@ -220,7 +237,7 @@ def read_data():
     
                 if (mav_com.pixhawk and mav_com.pixhawk.fd in readable and mav_com.mav_connected):
                     msg = mav_com.read_pixhawk()        
-                    if (msg):
+                    if (msg):                        
                         telemetry_data[msg.get_type()] = msg
                         mav_com.send_planner(msg.get_msgbuf())
                         write_check[1] += 1
@@ -267,7 +284,7 @@ def send_data():
     while (not stop_event.is_set()):
         try:
 
-            with comm_lock:
+            with comm_lock1:
                 mav_com.send_heartbeat()
     
                 for _, msg in list(telemetry_data.items()):
@@ -336,14 +353,14 @@ def log():
             loggr.raw_print(f" POS:", 3, "")
 
             if (shoot_pos[0]):
-                loggr.raw_print(shoot_pos[0][0] + " " + shoot_pos[0][1], 1, "")
+                loggr.raw_print(str(shoot_pos[0][0]) + "," + str(shoot_pos[0][1]), 1, "")
             else:
                 loggr.raw_print("NONE", 2, "")
             
             loggr.raw_print("/", 0 , "") 
 
             if (shoot_pos[1]):
-                loggr.raw_print(shoot_pos[1][0] + " " + shoot_pos[1][1], 1, "")
+                loggr.raw_print(str(shoot_pos[1][0]) + "," + str(shoot_pos[1][1]), 1, "")
             else:
                 loggr.raw_print("NONE", 2, "")
 
@@ -361,26 +378,41 @@ def log():
 # PROCESS DATA
 def mainloop():
 
-    global gcs_data, is_det, telemetry_data, signal_lost
+    global gcs_data, is_det, telemetry_data, signal_lost, lost_start
 
-    lost_start = -1
+    last_channel = -1
+    last_rc = -1
+    new_channel = -1
+
+    failsafed = False
 
     while (not stop_event.is_set()):
         try:
             # FAILSAFE
-
             if (FAILSAFE_ACTIVE):
-                if telemetry_data.get("RC_CHANNELS") and telemetry_data.get("RC_CHANNELS").rssi < SIGNAL_TRESHOLD:
-                    if (lost_start >= 0 and time.time() - lost_start > FAILSAFE_DELAY):
-                        mav_com.send_fail()
-                        loggr.print(" >>> FAIL SAFE <<< ", 2)            
-                    else:
-                        signal_lost = True
-                        lost_start = time.time()
-            
-                elif signal_lost:
+                if (telemetry_data.get("HEARTBEAT") and telemetry_data.get("HEARTBEAT").system_status == 5
+                 and not failsafed and not signal_lost):
+                    last_rc = time.time()
+                    signal_lost = True
+
+                if (last_rc > 0 and time.time()-last_rc > FAILSAFE_DELAY):
+                    failsafed = True
+                    mav_com.send_fail()
+                    loggr.print(" >>> FAIL SAFE <<< ", 2)
+
+                """rc = (telemetry_data.get("RC_CHANNELS"))
+                if (rc):
+                    new_channel = rc.chan15_raw
+
+                if (new_channel != last_channel or last_channel < 0):
+                    last_rc = time.time()
+                    last_channel = new_channel
                     signal_lost = False
-                    lost_start = -1
+
+                if (last_rc > 0 and time.time()-last_rc > FAILSAFE_DELAY):
+                    signal_lost = True
+                    mav_com.send_fail()
+                    loggr.print(" >>> FAIL SAFE <<< ", 2) """          
 
 
             # PROCESS GCS DATA
@@ -389,7 +421,8 @@ def mainloop():
                 if (blst[0].value == 0):
                     with firing_lock:
                         loggr.print("ACTIVATE 1", 0)
-                        activate_mech(0)
+                        with firing_lock:
+                            p.ChangeDutyCycle(MIN_PWM)
 
                 elif (blst[0].value == 1):
                     mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))
@@ -402,7 +435,8 @@ def mainloop():
                 elif (blst[0].value == 3):
                     with firing_lock:
                         loggr.print("ACTIVATE 2", 0)
-                        activate_mech(1)
+                        with firing_lock:
+                            p.ChangeDutyCycle(MAX_PWM)
 
                 elif (blst[0].value == 4):
                     loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
