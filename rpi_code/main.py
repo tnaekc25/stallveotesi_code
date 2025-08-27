@@ -72,7 +72,7 @@ def detect_and_fire():
 
                 # CHECK TO GO WAYPOINT
                 for clss in range(2):
-                    if (shoot_pos[clss]):
+                    if ((True not in headed) and shoot_pos[clss]):
                         if (time.time()-shoot_pos[clss][5] > SHOOT_COOLDOWN):
                             gps = telemetry_data.get("GLOBAL_POSITION_INT")
         
@@ -352,6 +352,7 @@ def log():
             else:
                 loggr.raw_print(f" ({-1}) ", 3, "")
 
+            loggr.raw_print("|", 0)
 
             loggr.raw_print(f" POS:", 3, "")
 
@@ -369,8 +370,6 @@ def log():
 
             loggr.raw_print("|", 0 , "") 
 
-
-            loggr.raw_print(" ||", 0)
 
         read_check = [0, 0, 0, 0]
         write_check = [0, 0, 0]
