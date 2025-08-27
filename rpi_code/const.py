@@ -11,16 +11,14 @@ LOG_WAIT = 1
 
 ERROR_WAIT = 0.1
 
-FAILSAFE_DELAY = 5
-FAILSAFE_ACTIVE = True
+FAILSAFE_DELAY = 1
+FAILSAFE_ACTIVE = False
 
 ############################################
 
 HIT_ALTITUDE = 10000
 HIT_AIRSPEED = 10
 HIT_DIRECTION = 270
-
-R = 6378137.0
 
 ############## NETWORK CONST ###############
 
@@ -52,7 +50,6 @@ SHOOT_COOLDOWN = 5
 
 #############################################
 
-SIGNAL_TRESHOLD = 10
 ERROR_TRY_COUNT = 3
 
 #############################################
