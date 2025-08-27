@@ -1,5 +1,5 @@
 from pymavlink import mavutil
-import numpy as np, socket, select
+import numpy as np, socket, select, time
 
 PWM_THROTTLE_CUT = 0
 PWM_ELEVATOR_UP = 2000
@@ -21,7 +21,7 @@ class MavConnect:
 
         self.testing = False
 
-        self.is_armed = None
+        self.is_armed = False
         self.control_mode = None
 
 
@@ -129,18 +129,34 @@ class MavConnect:
 
     def toggle_arm(self, heartbeat):
         if (not heartbeat):
-            return
+            return False
 
-        self.is_armed = (not self.check_armed(heartbeat))
-
+        is_armed = (self.check_armed(heartbeat))
+            
         self.pixhawk.mav.command_long_send(
             self.pixhawk.target_system,
             self.pixhawk.target_component,
             mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
             0,
-            1,
-            0, 0, 0, 0, 0, 0
+            0 if is_armed else 1,
+            21196,
+            0, 0, 0, 0, 0
         )
+        
+        ack = self.pixhawk.recv_match(type='COMMAND_ACK', blocking=True, timeout=5)
+        if ack and ack.command == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
+            if ack.result != mavutil.mavlink.MAV_RESULT_ACCEPTED:
+                return False
+
+        time.sleep(0.5)
+        
+        self.pixhawk.mav.set_mode_send(
+            self.pixhawk.target_system,
+            mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            0
+        )
+
+        return True
 
 
 
@@ -179,5 +195,5 @@ class MavConnect:
 
         msg = self.pixhawk.recv_match(type='COMMAND_ACK', blocking=True, timeout=0.5)
         if msg and msg.command == mavutil.mavlink.MAV_CMD_DO_REPOSITION:
-            return True
+            return msg.result == mavutil.mavlink.MAV_RESULT_ACCEPTED
         return False

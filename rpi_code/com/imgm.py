@@ -15,7 +15,7 @@ class DetectClass:
 		self.default_pitch = default_pitch
 
 	def get_boxes(self, img):
-		return self.model.predict(img, conf=0.8, show = False)[0].boxes
+		return self.model.predict(img, conf=0.9, show = False)[0].boxes
 
 	def get_distance(self, x, y, roll, pitch, h):
 		
