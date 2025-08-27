@@ -19,7 +19,7 @@ from cscom import MavCom, ImageCom
 os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0' 
 
 upimg = None
-IP = "192.168.0.101" 
+IP = "192.168.0.102" 
 PORT1 = 14550 
 PORT2 = 14551
 
@@ -341,13 +341,13 @@ class BottomWidget(ImageWidget):
             self.bar2.setSlide(com.cont_inputs[1])
             self.prev_vals["cont_inputs_1"] = com.cont_inputs[1]
     
-        if abs(com.cont_inputs[2] - self.prev_vals["cont_inputs_2"]) > 0.01:
-            self.bar3.setSlide(com.cont_inputs[2])
-            self.prev_vals["cont_inputs_2"] = com.cont_inputs[2]
-    
         if abs(com.cont_inputs[3] - self.prev_vals["cont_inputs_3"]) > 0.01:
-            self.bar4.setSlide(com.cont_inputs[3])
+            self.bar3.setSlide(com.cont_inputs[3])
             self.prev_vals["cont_inputs_3"] = com.cont_inputs[3]
+    
+        if abs(com.cont_inputs[2] - self.prev_vals["cont_inputs_2"]) > 0.01:
+            self.bar4.setSlide(com.cont_inputs[2])
+            self.prev_vals["cont_inputs_2"] = com.cont_inputs[2]
 
         self.telem.setText(self.telem_text.format(*[format(x, ".4g") if type(x) != str else x for x in (
             com.airspeed, com.altitude, com.heading, 0,
