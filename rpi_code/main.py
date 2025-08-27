@@ -48,6 +48,7 @@ detection_count = [0, 0]
 last_detect = [-1, -1]
 shoot_pos = [None, None]
 pos_diff = [None, None]
+is_shot = [0, 0]
 
 
 #############################
@@ -152,6 +153,7 @@ def detect_and_fire():
                                     if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
                                         with firing_lock:
                                             p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                                            is_shot[clss] = 1
     
                                         headed[clss] = False
                                         shoot_pos[clss] = None
@@ -302,8 +304,8 @@ def send_data():
                     text=("STATINF"
                     + ('1' if mav_com.is_armed else '0')
                     + ('1' if (mav_com.control_mode == 'MANUAL') else '0')
-                    + ('1' if detection_count[0] else '0')
-                    + ('1' if detection_count[1] else '0')
+                    + ('1' if detection_count[0] >= 0 else '0')
+                    + ('1' if detection_count[1] >= 0 else '0')
                     + ('1' if is_det else '0')
                     ).encode('utf-8')
                 )
@@ -424,6 +426,7 @@ def mainloop():
                         loggr.print("ACTIVATE 1", 0)
                         with firing_lock:
                             p.ChangeDutyCycle(MIN_PWM)
+                            is_shot[0] = 1
 
                 elif (blst[0].value == 1):
                     with comm_lock1, comm_lock2:
@@ -443,6 +446,7 @@ def mainloop():
                         loggr.print("ACTIVATE 2", 0)
                         with firing_lock:
                             p.ChangeDutyCycle(MAX_PWM)
+                            is_shot[1] = 1
 
                 elif (blst[0].value == 4):
                     loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
