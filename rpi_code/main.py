@@ -50,55 +50,84 @@ shoot_pos = [None, None]
 pos_diff = [None, None]
 is_shot = [0, 0]
 
+headed = [False, False]
+should_head = [False, False]
+
+head_time = [-1, -1]
+
 
 #############################
 
+
+def distn(lat1, lon1, lat2, lon2):
+    R = 6371000
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    return R * c
 
 
 ## APPLY OBJECT DETECTION AND RUN SIMULATION AND FIRE
 def detect_and_fire():
 
-    global box_data, telemetry_data, detection_count, last_detect, pos_diff
-
-    headed = [False, False]
+    global box_data, telemetry_data, detection_count, last_detect
+    global pos_diff, headed, head_time, is_shot, shoot_pos, should_head
 
     if (PC_TEST):
         shoot_pos[0] = (39.8831412, 32.7792335, 39.8837422, 32.7785039, 207, time.time())
 
     while (not stop_event.is_set()):
         try:
+            # CHECK TO GUIDE TO TARGET
+            for clss in range(2):
+                if (shoot_pos[clss] and not headed[clss]):
+                    if (time.time()-shoot_pos[clss][5] > SHOOT_COOLDOWN):
+                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
+            
+                        if (gps):
+                            lat = gps.lat / 1e7
+                            lon = gps.lon / 1e7
+            
+                            tolat = shoot_pos[clss][0]
+                            tolon = shoot_pos[clss][1]
+            
+                            pos_diff[clss] = (abs(lat - shoot_pos[clss][2]), abs(lon - shoot_pos[clss][3]),
+                             distn(lat, lon, shoot_pos[clss][2], shoot_pos[clss][3]))
+                
+                            if (pos_diff[clss][2] < MAX_SHOOT_DIST):
+                                should_head[clss] = True
+
+                # GUIDE TO TARGET
+                if ((True not in headed)):
+                    if (should_head[clss]):
+                        with comm_lock1, comm_lock2:
+                            while True:
+                                if (mav_com.go_waypoint(tolat, tolon, HIT_ALTITUDE,
+                                    HIT_AIRSPEED, shoot_pos[clss][4], lat, lon, loggr)):
+                                    break
+                                else:
+                                    loggr.print("FAIL AT REPOSITION", 2)
+                            headed[clss] = True
+                            should_head[clss] = False
+                            head_time[clss] = time.time()
+
+                # RETURN IF TIMEOUTS and RESTART DETECTION
+                elif (headed[clss] and time.time()-head_time[clss] > SEARCH_TIMEOUT):
+                    while (not mav_com.return_auto()):
+                        pass
+                    loggr.print("TARGET RESET - MODE IS AUTO", 1)
+                    headed[clss] = False
+                    shoot_pos[clss] = None
+                    detection_count[clss] = 0
+                    last_detect[clss] = -1
+
+
             if (is_det and (img_feed) is not None and
              (detection_count[0] <= REQUIRED_DETECTION_COUNT or detection_count[1] <= REQUIRED_DETECTION_COUNT)):
                 raw_box_data = img_det.get_boxes(img_feed)
                 box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
-
-                # CHECK TO GO WAYPOINT
-                for clss in range(2):
-                    if ((True not in headed) and shoot_pos[clss]):
-                        if (time.time()-shoot_pos[clss][5] > SHOOT_COOLDOWN):
-                            print(clss + "TEST START")
-                            gps = telemetry_data.get("GLOBAL_POSITION_INT")
-        
-                            if (gps):
-                                lat = gps.lat / 1e7
-                                lon = gps.lon / 1e7
-        
-                                tolat = shoot_pos[clss][0]
-                                tolon = shoot_pos[clss][1]
-        
-                                pos_diff[clss] = [abs(lat - shoot_pos[clss][2]), abs(lon - shoot_pos[clss][3])]
-
-                                print(clss + "TEST DIFF" + pos_diff[clss])
-            
-                                if (pos_diff[0] < MAX_SHOOT_DIST and 
-                                    pos_diff[1] < MAX_SHOOT_DIST):
-                                    with comm_lock1, comm_lock2:
-                                        while True:
-                                            if (mav_com.go_waypoint(tolat, tolon, HIT_ALTITUDE,
-                                             HIT_AIRSPEED, shoot_pos[clss][4])):
-                                                break
-                                        headed[clss] = True
-    
 
                 for box in box_data:
                     clss = 1 if box[0] else 0
@@ -109,7 +138,9 @@ def detect_and_fire():
                     if detection_count[clss] < REQUIRED_DETECTION_COUNT:
                         detection_count[clss] += 1
                         last_detect[clss] = time.time()
-                
+                    
+
+                    # FIND THE TARGET's POSITION
                     elif detection_count[clss] == REQUIRED_DETECTION_COUNT:
                         with detection_lock: 
                             hud = telemetry_data.get("VFR_HUD")
@@ -138,9 +169,9 @@ def detect_and_fire():
                                 shoot_pos[clss] = (lat, lon, gps.lat / 1e7, gps.lon / 1e7, hud.heading, time.time())
 
 
+                    # CHECK TO FIRE
                     elif detection_count[clss] > REQUIRED_DETECTION_COUNT:
                         with detection_lock:
-                            # CHECK TO FIRE
                             if (headed[clss]):
                                 hud = telemetry_data.get("VFR_HUD")
                                 attd = telemetry_data.get("ATTITUDE")
@@ -161,6 +192,7 @@ def detect_and_fire():
                                             is_shot[clss] = 1
     
                                         headed[clss] = False
+                                        mav_com.return_auto()
                                         shoot_pos[clss] = None
 
 
@@ -359,21 +391,29 @@ def log():
 
             loggr.raw_print("|", 0)
 
-            loggr.raw_print(f" POS:", 3, "")
+            loggr.raw_print(f">>> DISTANCE TO REPOSITION: ", 3, "")
 
-            if (pos_diff[0]):
-                loggr.raw_print(str(round(pos_diff[0][0]), 3) + "," + str(round(pos_diff[0][1]), 3), 1, "")
+            if (shoot_pos[0] and pos_diff[0]):
+                if (not headed[0]):
+                    loggr.raw_print(str(round(pos_diff[0][0], 4)) + "deg , " + str(round(pos_diff[0][1], 4)) + "deg = " +
+                        str(round(pos_diff[0][2], 4)) + "m", 0, "")
+                else:
+                    loggr.raw_print(f"HEADED {round(time.time()-head_time[0], 2)} s ago", 3, "")
             else:
                 loggr.raw_print("NONE", 2, "")
             
-            loggr.raw_print("/", 0 , "") 
+            loggr.raw_print(" - ", 0 , "") 
 
-            if (pos_diff[1]):
-                loggr.raw_print(str(round(pos_diff[1][0]), 3) + "," + str(round(pos_diff[1][1]), 3), 1, "")
+            if (shoot_pos[1] and pos_diff[1]):
+                if (not headed[0]):
+                    loggr.raw_print(str(round(pos_diff[1][0], 4)) + "deg ," + str(round(pos_diff[1][1], 4)) + "deg = " +
+                        str(round(pos_diff[1][2], 4)) + "m", 1, "")
+                else:
+                    loggr.raw_print(f"HEADED {time.time()-head_time[1]} s ago", 1, "")
             else:
                 loggr.raw_print("NONE", 2, "")
 
-            loggr.raw_print("|", 0 , "") 
+            loggr.raw_print(" |", 0, "\n\n") 
 
 
         read_check = [0, 0, 0, 0]

@@ -40,13 +40,14 @@ SERVO_PIN = 12
 REQUIRED_DETECTION_COUNT = 3
 DETECTION_TIMEOUT = 3
 
-MAX_SHOOT_DIST = 0.01
+MAX_SHOOT_DIST = 2
 MAX_DIST = 5
 
 SHOOT_COOLDOWN = 5
 
 #############################################
 
+SEARCH_TIMEOUT = 5
 
 #############################################
 
