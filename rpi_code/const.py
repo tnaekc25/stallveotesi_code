@@ -54,6 +54,6 @@ ERROR_TRY_COUNT = 3
 
 #############################################
 
-PC_TEST = False
+PC_TEST = True
 IMG_TEST = False
 TELEM_TEST = False

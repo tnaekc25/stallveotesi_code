@@ -62,6 +62,9 @@ def detect_and_fire():
 
     headed = [False, False]
 
+    if (PC_TEST):
+        shoot_pos[0] = (39.8831412, 32.7792335, 39.8837422, 32.7785039, 207, time.time())
+
     while (not stop_event.is_set()):
         try:
             if (is_det and (img_feed) is not None and
@@ -69,11 +72,11 @@ def detect_and_fire():
                 raw_box_data = img_det.get_boxes(img_feed)
                 box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
 
-
                 # CHECK TO GO WAYPOINT
                 for clss in range(2):
                     if ((True not in headed) and shoot_pos[clss]):
                         if (time.time()-shoot_pos[clss][5] > SHOOT_COOLDOWN):
+                            print(clss + "TEST START")
                             gps = telemetry_data.get("GLOBAL_POSITION_INT")
         
                             if (gps):
@@ -84,6 +87,8 @@ def detect_and_fire():
                                 tolon = shoot_pos[clss][1]
         
                                 pos_diff[clss] = [abs(lat - shoot_pos[clss][2]), abs(lon - shoot_pos[clss][3])]
+
+                                print(clss + "TEST DIFF" + pos_diff[clss])
             
                                 if (pos_diff[0] < MAX_SHOOT_DIST and 
                                     pos_diff[1] < MAX_SHOOT_DIST):
@@ -239,7 +244,7 @@ def read_data():
                 readable, _, _ = select.select(
                     inputs,
                     [], [], 0.01)
-    
+                
                 if (mav_com.pixhawk and mav_com.pixhawk.fd in readable and mav_com.mav_connected):
                     msg = mav_com.read_pixhawk()        
                     if (msg):                        
@@ -255,7 +260,7 @@ def read_data():
                         write_check[0] += 1
                         read_check[1] += 1
     
-                if (mav_com.gcs_in.fd in readable and mav_com.mav_connected):
+                if (mav_com.gcs_in and mav_com.gcs_in.fd in readable and mav_com.mav_connected):
                     msg = mav_com.get_gcs()
                     if (msg):
                         if (gcs_data.get(msg.get_type()) == None):
@@ -525,15 +530,17 @@ try:
         ################## START CRITICAL COMPONENTS ##################
     
         ################## START PIXHAWK CONNECTION ##################
-        if (not PC_TEST):
-            loggr.print("Starting Pixhawk Connection...", 3)
+        loggr.print("Starting Pixhawk Connection...", 3)
+        if (PC_TEST):
+            pixhawk = mavutil.mavlink_connection('udp:0.0.0.0:31314')
+        else:
             pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
-            loggr.print("Success!\n", 1)
+        loggr.print("Success!\n", 1)
         
         
-            loggr.print("Waiting for Pixhawk Hearbeat...", 3)
-            pixhawk.wait_heartbeat()
-            loggr.print("Success!\n", 1)
+        loggr.print("Waiting for Pixhawk Hearbeat...", 3)
+        pixhawk.wait_heartbeat()
+        loggr.print("Success!\n", 1)
             
     
         ################## IMAGE CLASSES ##################
