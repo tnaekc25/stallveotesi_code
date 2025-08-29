@@ -74,6 +74,7 @@ class RecvClass:
     		"videoconvert ! appsink")
 
 		self.is_open = False
+		self.cap = None
 
 	def recv(self):
 		ret, frame = self.cap.read()
@@ -113,6 +114,7 @@ class SendClass:
 		self.fps = fps
 
 		self.is_open = False
+		self.out = None
 
 	def send(self, img):
 		self.out.write(img)
