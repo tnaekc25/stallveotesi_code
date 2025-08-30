@@ -126,7 +126,7 @@ def detect_and_fire():
 
             if (is_det and (img_feed) is not None and
              (detection_count[0] <= REQUIRED_DETECTION_COUNT or detection_count[1] <= REQUIRED_DETECTION_COUNT)):
-                raw_box_data = img_det.get_boxes(img_feed)
+                raw_box_data = img_det.get_boxes(img_feed, DET_CONF)
                 box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
 
                 for box in box_data:
