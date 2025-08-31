@@ -54,6 +54,8 @@ should_head = [False, False]
 
 head_time = [-1, -1]
 
+projected_hit = None
+
 
 #############################
 
@@ -72,7 +74,7 @@ def distn(lat1, lon1, lat2, lon2):
 
 
 def manual_fire():
-    global box_data, telemetry_data, detection_count, last_detect, is_shot
+    global box_data, telemetry_data, detection_count, last_detect, is_shot, projected_hit
 
     while (not stop_event.is_set()):
         try:
@@ -107,6 +109,8 @@ def manual_fire():
                                 
                             c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
                             hx, hy = c[0:2]
+
+                            projected_hit = (hx, hy, detx, dety, clss)
     
                             if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
                                 with firing_lock:
@@ -124,7 +128,7 @@ def manual_fire():
 ## APPLY OBJECT DETECTION AND RUN SIMULATION AND FIRE
 def detect_and_fire():
 
-    global box_data, telemetry_data, detection_count, last_detect
+    global box_data, telemetry_data, detection_count, last_detect, projected_hit
     global pos_diff, headed, head_time, is_shot, shoot_pos, should_head
 
     if (PC_TEST):
@@ -216,6 +220,8 @@ def detect_and_fire():
                             except RuntimeError as e:
                                 continue
 
+                            projected_hit = (sx, sy, detx, dety, clss)
+
                             lat, lon = img_det.pos_to_gps(gps, hud, sx, sy)
                             shoot_pos[clss] = (lat, lon, gps.lat / 1e7, gps.lon / 1e7, hud.heading, time.time())
 
@@ -234,6 +240,8 @@ def detect_and_fire():
                                 
                             c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
                             hx, hy = c[0:2]
+
+                            projected_hit = (hx, hy, detx, dety, clss)
     
                             if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
                                 with firing_lock:
@@ -464,6 +472,12 @@ def log():
                     loggr.raw_print(f"HEADED {time.time()-head_time[1]} s ago", 1, "")
             else:
                 loggr.raw_print("NONE", 2, "")
+
+            loggr.raw_print(" | ", 0, "")
+
+            if (projected_hit):
+                loggr.raw_print(f"{projected_hit[4]} - hit: {projected_hit[0]} {projected_hit[1]}" +
+                    f", target: {projected_hit[2]} {projected_hit[3]}", 1, "")
 
             loggr.raw_print(" |", 0, "\n\n") 
 
