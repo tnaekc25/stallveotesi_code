@@ -49,6 +49,7 @@ SHOOT_COOLDOWN = 5
 
 SEARCH_TIMEOUT = 5
 DET_CONF = 0.8
+IS_MANUAL = True
 
 #############################################
 

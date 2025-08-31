@@ -40,7 +40,6 @@ lost_start = -1
 #############################
 
 firing_lock = Lock()
-detection_lock = Lock()
 comm_lock1 = Lock()
 comm_lock2 = Lock()
 
@@ -67,6 +66,59 @@ def distn(lat1, lon1, lat2, lon2):
     a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
     c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
     return R * c
+
+
+
+
+
+def manual_fire():
+    global box_data, telemetry_data, detection_count, last_detect, is_shot
+
+    while (not stop_event.is_set()):
+        try:
+            if (is_det and (img_feed) is not None and (False in is_shot[clss])):
+                raw_box_data = img_det.get_boxes(img_feed, DET_CONF)
+                box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
+
+                for box in box_data:
+                    clss = 1 if box[0] else 0
+
+                    if (is_shot[clss]):
+                        continue
+                
+                    if last_detect[clss] >= 0 and (time.time() - last_detect[clss]) > DETECTION_TIMEOUT:
+                        detection_count[clss] = 0
+                
+                    if detection_count[clss] < REQUIRED_DETECTION_COUNT:
+                        detection_count[clss] += 1
+                        last_detect[clss] = time.time()
+
+                    # CHECK TO FIRE
+                    if detection_count[clss] >= REQUIRED_DETECTION_COUNT:
+                        hud = telemetry_data.get("VFR_HUD")
+                        attd = telemetry_data.get("ATTITUDE")
+                        
+                        if (hud and attd):
+                            try:
+                                detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
+                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
+                            except ValueError:
+                                continue
+                                
+                            c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
+                            hx, hy = c[0:2]
+    
+                            if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
+                                with firing_lock:
+                                    p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                                    is_shot[clss] = 1
+
+            time.sleep(DET_WAIT)
+        
+        except Exception as e:
+            loggr.print("ERROR AT THREAD 0 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
+
 
 
 ## APPLY OBJECT DETECTION AND RUN SIMULATION AND FIRE
@@ -124,13 +176,15 @@ def detect_and_fire():
                     last_detect[clss] = -1
 
 
-            if (is_det and (img_feed) is not None and
-             (detection_count[0] <= REQUIRED_DETECTION_COUNT or detection_count[1] <= REQUIRED_DETECTION_COUNT)):
+            if (is_det and (img_feed) is not None and (False in is_shot[clss])):
                 raw_box_data = img_det.get_boxes(img_feed, DET_CONF)
                 box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
 
                 for box in box_data:
                     clss = 1 if box[0] else 0
+
+                    if (is_shot[clss]):
+                        continue
                 
                     if last_detect[clss] >= 0 and (time.time() - last_detect[clss]) > DETECTION_TIMEOUT:
                         detection_count[clss] = 0
@@ -141,59 +195,55 @@ def detect_and_fire():
                     
 
                     # FIND THE TARGET's POSITION
-                    elif detection_count[clss] == REQUIRED_DETECTION_COUNT:
-                        with detection_lock: 
-                            hud = telemetry_data.get("VFR_HUD")
-                            attd = telemetry_data.get("ATTITUDE")
-                            gps = telemetry_data.get("GLOBAL_POSITION_INT")
-                            
-                            if (hud and attd and gps):
+                    if detection_count[clss] == REQUIRED_DETECTION_COUNT:
+                        hud = telemetry_data.get("VFR_HUD")
+                        attd = telemetry_data.get("ATTITUDE")
+                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
+                        
+                        if (hud and attd and gps):
+                            detection_count[clss] += 1
+                            last_detect[clss] = -1
 
-                                detection_count[clss] += 1
-                                last_detect[clss] = -1
+                            try:
+                                detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
+                                (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
+                            except ValueError as e:
+                                continue
 
-                                try:
-                                    detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
-                                except ValueError as e:
-                                    continue
+                            try:
+                                sx, sy = sim.revsim(detx, dety, 
+                                    HIT_ALTITUDE, HIT_AIRSPEED, MDELAY)
+                            except RuntimeError as e:
+                                continue
 
-                                try:
-                                    sx, sy = sim.revsim(detx, dety, 
-                                        HIT_ALTITUDE, HIT_AIRSPEED, MDELAY)
-                                except RuntimeError as e:
-                                    continue
-
-                                lat, lon = img_det.pos_to_gps(gps, hud, sx, sy)
-
-                                shoot_pos[clss] = (lat, lon, gps.lat / 1e7, gps.lon / 1e7, hud.heading, time.time())
+                            lat, lon = img_det.pos_to_gps(gps, hud, sx, sy)
+                            shoot_pos[clss] = (lat, lon, gps.lat / 1e7, gps.lon / 1e7, hud.heading, time.time())
 
 
                     # CHECK TO FIRE
-                    elif detection_count[clss] > REQUIRED_DETECTION_COUNT:
-                        with detection_lock:
-                            if (headed[clss]):
-                                hud = telemetry_data.get("VFR_HUD")
-                                attd = telemetry_data.get("ATTITUDE")
-                            
-                                if (hud and attd):
-                                    try:
-                                        detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                            (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
-                                    except ValueError:
-                                        continue
-                                        
-                                    c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
-                                    hx, hy = c[0:2]
-            
-                                    if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
-                                        with firing_lock:
-                                            p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
-                                            is_shot[clss] = 1
+                    elif (headed[clss]):
+                        hud = telemetry_data.get("VFR_HUD")
+                        attd = telemetry_data.get("ATTITUDE")
+                    
+                        if (hud and attd):
+                            try:
+                                detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
+                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
+                            except ValueError:
+                                continue
+                                
+                            c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
+                            hx, hy = c[0:2]
     
-                                        headed[clss] = False
-                                        mav_com.return_auto()
-                                        shoot_pos[clss] = None
+                            if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
+                                with firing_lock:
+                                    p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                                    is_shot[clss] = 1
+
+                                headed[clss] = False
+                                while (not mav_com.return_auto()):
+                                    pass
+                                shoot_pos[clss] = None
 
 
             time.sleep(DET_WAIT)
@@ -324,7 +374,7 @@ def send_data():
     global telemetry_data, detection_count, is_det
 
     while (not stop_event.is_set()):
-
+        try:
 
             with comm_lock1:
                 mav_com.send_heartbeat()
@@ -352,7 +402,9 @@ def send_data():
                     mav_com.send_box(box)
     
                 time.sleep(SEND_WAIT)
-
+        except Exception as e:
+            loggr.print("ERROR AT THREAD 3 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
 
 
 
@@ -692,6 +744,9 @@ try:
             telem_logger = TelemLog("telem_log.txt")
             telemlog_thread = Thread(target=write_telem, daemon=False)
             telemlog_thread.start()
+        elif IS_MANUAL:
+            detect_thread = Thread(target=manual_fire, daemon=False)
+            detect_thread.start()
         else:
             detect_thread = Thread(target=detect_and_fire, daemon=False)
             detect_thread.start()
