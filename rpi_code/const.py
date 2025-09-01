@@ -11,13 +11,10 @@ LOG_WAIT = 1
 
 ERROR_WAIT = 0.1
 
+#############################################
+
 FAILSAFE_DELAY = 1
 FAILSAFE_ACTIVE = False
-
-############################################
-
-HIT_ALTITUDE = 40
-HIT_AIRSPEED = 15
 
 ############## NETWORK CONST ###############
 
@@ -36,6 +33,8 @@ MAX_PWM = 12.874
 MDELAY = 1
 SERVO_PIN = 12
 
+################ DETECTION CONST ################
+
 REQUIRED_DETECTION_COUNT = 3
 DETECTION_TIMEOUT = 3
 
@@ -44,11 +43,16 @@ MAX_DIST = 5
 
 SHOOT_COOLDOWN = 5
 
-#############################################
-
 SEARCH_TIMEOUT = 5
 DET_CONF = 0.8
+
 IS_MANUAL = True
+SIMPLE_FIRE = False
+
+############################################
+
+HIT_ALTITUDE = 40
+HIT_AIRSPEED = 15
 
 #############################################
 

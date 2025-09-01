@@ -73,6 +73,46 @@ def distn(lat1, lon1, lat2, lon2):
 
 
 
+
+
+def direct_fire():
+    global box_data, telemetry_data, detection_count, last_detect, is_shot, projected_hit
+
+    while (not stop_event.is_set()):
+        try:
+            if (is_det and (img_feed) is not None and (False in is_shot)):
+                raw_box_data = img_det.get_boxes(img_feed, DET_CONF)
+                box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
+
+                for box in box_data:
+                    clss = 1 if box[0] else 0
+
+                    if (is_shot[clss]):
+                        continue
+                
+                    if last_detect[clss] >= 0 and (time.time() - last_detect[clss]) > DETECTION_TIMEOUT:
+                        detection_count[clss] = 0
+                
+                    if detection_count[clss] < REQUIRED_DETECTION_COUNT:
+                        detection_count[clss] += 1
+                        last_detect[clss] = time.time()
+
+                    # CHECK TO FIRE
+                    if detection_count[clss] >= REQUIRED_DETECTION_COUNT:
+                        p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                        for x in range(3):
+                            loggr.print(">>> DIRECT SHOOT")
+                        is_shot[clss] = 1
+
+            time.sleep(DET_WAIT)
+        
+        except Exception as e:
+            loggr.print("ERROR AT THREAD 0 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
+
+
+
+
 def manual_fire():
     global box_data, telemetry_data, detection_count, last_detect, is_shot, projected_hit
 
@@ -115,7 +155,7 @@ def manual_fire():
                             if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
                                 with firing_lock:
                                     p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
-                                    for x in range(10):
+                                    for x in range(3):
                                         loggr.print(">>> AUTO SHOOT")
                                     is_shot[clss] = 1
 
@@ -480,6 +520,8 @@ def log():
             if (projected_hit):
                 loggr.raw_print(f"{projected_hit[4]} - hit: {projected_hit[0]} {projected_hit[1]}" +
                     f", target: {projected_hit[2]} {projected_hit[3]}", 1, "")
+            else:
+                loggr.raw_print("NO HIT PROJECTION", 2, "")
 
             loggr.raw_print(" |", 0, "\n\n") 
 
@@ -761,8 +803,12 @@ try:
             telemlog_thread = Thread(target=write_telem, daemon=False)
             telemlog_thread.start()
         elif IS_MANUAL:
-            detect_thread = Thread(target=manual_fire, daemon=False)
-            detect_thread.start()
+            if SIMPLE_FIRE:
+                detect_thread = Thread(target=direct_fire, daemon=False)
+                detect_thread.start()
+            else:
+                detect_thread = Thread(target=manual_fire, daemon=False)
+                detect_thread.start()
         else:
             detect_thread = Thread(target=detect_and_fire, daemon=False)
             detect_thread.start()
