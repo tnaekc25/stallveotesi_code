@@ -252,7 +252,7 @@ class BottomWidget(ImageWidget):
 
     
         if abs(com.airspeed - self.prev_vals["airspeed"]) > 0.1:
-            self.needle1.num2Rot(com.airspeed*100)
+            self.needle1.num2Rot(com.airspeed*80)
             self.speednum.setDigits(com.airspeed)
             self.prev_vals["airspeed"] = com.airspeed
     

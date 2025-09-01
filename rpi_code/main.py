@@ -115,6 +115,8 @@ def manual_fire():
                             if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
                                 with firing_lock:
                                     p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                                    for x in range(10):
+                                        loggr.print(">>> AUTO SHOOT")
                                     is_shot[clss] = 1
 
             time.sleep(DET_WAIT)
@@ -651,7 +653,7 @@ try:
     
         ################## IMAGE CLASSES ##################
         loggr.print("Starting Detection Model...", 3)
-        img_det = DetectClass("model.pt", 663, 663, 320, 240, np.pi / 4)
+        img_det = DetectClass("model.pt", 663, 663, 320, 240, -np.pi / 4)
         loggr.print("Success!\n", 1)
     
         loggr.print("Starting Camera Reader Class...", 3)
