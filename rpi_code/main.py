@@ -78,7 +78,7 @@ def manual_fire():
 
     while (not stop_event.is_set()):
         try:
-            if (is_det and (img_feed) is not None and (False in is_shot[clss])):
+            if (is_det and (img_feed) is not None and (False in is_shot)):
                 raw_box_data = img_det.get_boxes(img_feed, DET_CONF)
                 box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
 
@@ -180,7 +180,7 @@ def detect_and_fire():
                     last_detect[clss] = -1
 
 
-            if (is_det and (img_feed) is not None and (False in is_shot[clss])):
+            if (is_det and (img_feed) is not None and (False in is_shot)):
                 raw_box_data = img_det.get_boxes(img_feed, DET_CONF)
                 box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
 
