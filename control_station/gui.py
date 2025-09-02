@@ -47,7 +47,8 @@ class BottomWidget(ImageWidget):
         # |||||||||||||||||||||| Images ||||||||||||||||||||||
 
         self.image_comp = ImageWidget("src/test.png", self, self)
-        self.image_comp.setFactors(0.15, 0.261, 0.7944, 0.3461)
+        #self.image_comp.setFactors(0.15, 0.261, 0.7944, 0.3461)
+        self.image_comp.setFactors(0.27, 0.4698, 0.7944, 0.37)
         self.children.append(self.image_comp)
 
         self.connected_img = ImageWidget("src/connected.png", self, self)
