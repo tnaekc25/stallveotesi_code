@@ -1,7 +1,7 @@
 from pymavlink import mavutil
 import numpy as np, socket, select, time
 
-PWM_THROTTLE_CUT = 0
+PWM_THROTTLE_CUT = 950
 PWM_ELEVATOR_UP = 2000
 PWM_RUDDER_RIGHT = 2000
 PWM_AILERON_RIGHT = 2000 

@@ -252,7 +252,7 @@ def detect_and_fire():
 
                             try:
                                 detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
+                                (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt-804)
                             except ValueError as e:
                                 continue
 
@@ -276,11 +276,11 @@ def detect_and_fire():
                         if (hud and attd):
                             try:
                                 detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
+                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt-804)
                             except ValueError:
                                 continue
                                 
-                            c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
+                            c = sim.simulate(np.array((0, 0, hud.alt-804, 0, hud.airspeed, hud.climb)), MDELAY)
                             hx, hy = c[0:2]
 
                             projected_hit = (hx, hy, detx, dety, clss)
@@ -526,6 +526,16 @@ def log():
             loggr.raw_print(" |", 0, "\n\n") 
 
 
+            if (1):
+                attd = telemetry_data.get("ATTITUDE")
+                hud = telemetry_data.get("VFR_HUD")
+
+                if (attd and hud):
+                    detx, dety = img_det.get_distance(320,
+                        240, attd.roll, attd.pitch, hud.alt-804)
+                    loggr.raw_print(f"{detx} {dety} {hud.alt-804}", 1)
+
+
         read_check = [0, 0, 0, 0]
         write_check = [0, 0, 0]
 
@@ -578,9 +588,8 @@ def mainloop():
                 if (blst[0].value == 0):
                     with firing_lock:
                         loggr.print("ACTIVATE 1", 0)
-                        with firing_lock:
-                            p.ChangeDutyCycle(MIN_PWM)
-                            is_shot[0] = 1
+                        p.ChangeDutyCycle(MIN_PWM)
+                        is_shot[0] = 1
 
                 elif (blst[0].value == 1):
                     with comm_lock1, comm_lock2:
@@ -598,9 +607,8 @@ def mainloop():
                 elif (blst[0].value == 3):
                     with firing_lock:
                         loggr.print("ACTIVATE 2", 0)
-                        with firing_lock:
-                            p.ChangeDutyCycle(MAX_PWM)
-                            is_shot[1] = 1
+                        p.ChangeDutyCycle(MAX_PWM)
+                        is_shot[1] = 1
 
                 elif (blst[0].value == 4):
                     loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
@@ -695,7 +703,7 @@ try:
     
         ################## IMAGE CLASSES ##################
         loggr.print("Starting Detection Model...", 3)
-        img_det = DetectClass("model.pt", 663, 663, 320, 240, -np.pi / 4)
+        img_det = DetectClass("model.pt", 663, 663, 320, 240, -np.pi / 6)
         loggr.print("Success!\n", 1)
     
         loggr.print("Starting Camera Reader Class...", 3)
