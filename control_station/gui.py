@@ -19,7 +19,7 @@ from cscom import MavCom, ImageCom
 os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0' 
 
 upimg = None
-IP = "192.168.0.102" 
+IP = "172.20.10.4" 
 PORT1 = 14550 
 PORT2 = 14551
 
@@ -200,7 +200,7 @@ class BottomWidget(ImageWidget):
  Direction │ {:6}° {:1}   
 ───────────────────────
  Attitude (RPY):
- {:6}° {:6}° {:6}°    
+ {:4}° {:4}° {:4}°    
 ───────────────────────
  Armed / Control / Payld:
  {:4} / {:7} / {:6} 
