@@ -27,9 +27,9 @@ PORTS = (14550, 14551, 31313) # send recv mp
 
 ################ SERVO CONST ################
 
-MIN_PWM = 2.478
-NET_PWM = 7.11
-MAX_PWM = 12.874
+MIN_PWM = 2
+NET_PWM = 8
+MAX_PWM = 13
 MDELAY = 1
 SERVO_PIN = 12
 
@@ -44,7 +44,7 @@ MAX_DIST = 5
 SHOOT_COOLDOWN = 5
 
 SEARCH_TIMEOUT = 5
-DET_CONF = 0.6
+DET_CONF = 0.7
 
 IS_MANUAL = True
 SIMPLE_FIRE = False
