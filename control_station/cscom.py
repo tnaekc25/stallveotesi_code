@@ -47,6 +47,8 @@ class MavCom:
         self.connected = False
 
         self.boxes = []
+        self.waypoints = []
+        self.current_wp = -1
 
         #self.fp = open("out.txt", "r")
 
@@ -123,12 +125,12 @@ class MavCom:
             self.ground_speed = msg.groundspeed
             self.vertical_speed = msg.climb
             self.heading = msg.heading
-            self.altitude = msg.alt if msg.alt > 0 else 0
             return 1
     
         # GPS Position
         elif msg_type == "GLOBAL_POSITION_INT":
             self.gps_pos = (msg.lat / 1e7, msg.lon / 1e7)
+            self.altitude = (msg.relative_alt / 1000) if msg.relative_alt > 0 else 0
             return 1
     
         # Battery Status
@@ -160,7 +162,22 @@ class MavCom:
                             self.right_stat = (spltted[3] == '1')
                             self.is_det = (spltted[4] == '1')
 
+
             return 1
+
+        elif msg_type == "MISSION_COUNT":
+            self.waypoints = []
+            return 1
+
+        elif msg_type == "MISSION_ITEM":
+            self.waypoints.append((msg.seq, msg.x, msg.y))
+            return 1
+
+        elif msg_type == "MISSION_CURRENT":
+            self.current_wp = msg.seq
+            return 1
+
+        return 0
 
 
     def send_button(self, i):
@@ -217,6 +234,13 @@ class MavCom:
         self.battery_per = 0
     ###########
 
+
+    def getWaypoints(self):
+        self.mav_out.mav.named_value_int_send(
+            int(8*10),
+            b"button_data",
+            8
+        )
 
 
 class ImageCom:

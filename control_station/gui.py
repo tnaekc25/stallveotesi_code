@@ -19,7 +19,7 @@ from cscom import MavCom, ImageCom
 os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0' 
 
 upimg = None
-IP = "172.20.10.4" 
+IP = "192.168.0.102" 
 PORT1 = 14550 
 PORT2 = 14551
 
@@ -63,23 +63,24 @@ class BottomWidget(ImageWidget):
         # |||||||||||||||||||||| GPS ||||||||||||||||||||||
 
         self.gps_comp = MapWidget(self, 0, 0)
-        self.gps_comp.setFactors(0.15, 0.261, 0.2156, 0.3461)
+        #0.4698
+        self.gps_comp.setFactors(0.2327, 0.405, 0.2049, 0.3768)
         self.children.append(self.gps_comp)
 
         self.rot1 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.0005, self)
-        self.rot1.setFactors(0.03125, 0.054, 0.310764, 0.51)
+        self.rot1.setFactors(0.03125, 0.054, 0.052, 0.55)
         self.children.append(self.rot1)
 
         self.rot2 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.0005, self)
-        self.rot2.setFactors(0.03125, 0.054, 0.310764, 0.186)
+        self.rot2.setFactors(0.03125, 0.054, 0.052, 0.50)
         self.children.append(self.rot2)
 
         self.rot3 = PotentiometerWidget("src/dial.png", self, 2, 1, 0.003, self)
-        self.rot3.setFactors(0.03125, 0.054, 0.1215, 0.186)
+        self.rot3.setFactors(0.03125, 0.054, 0.052, 0.20)
         self.children.append(self.rot3)
 
         self.rot4 = PotentiometerWidget("src/dial.png", self, 2, 1, 0.003, self)
-        self.rot4.setFactors(0.03125, 0.054, 0.1215, 0.51)
+        self.rot4.setFactors(0.03125, 0.054, 0.052, 0.25)
         self.children.append(self.rot4)
 
         # |||||||||||||||||||||| Sliding Numbers ||||||||||||||||||||||
@@ -189,7 +190,7 @@ class BottomWidget(ImageWidget):
 
         self.bt26 = StyledButton2(self, "GPS", self)
         self.bt26.setFactors(0.026, 0.045, 0.22, 0.075)
-        self.bt26.clicked.connect(lambda : self.gps_comp.setPos(*com.gps_pos))
+        self.bt26.clicked.connect(self.updateGPS)
         self.children.append(self.bt26)
 
         # |||||||||||||||||||||| Telemetry ||||||||||||||||||||||
@@ -313,12 +314,18 @@ class BottomWidget(ImageWidget):
             self.gps_comp.setGridRefLA(self.rot3.counter)
             self.rot3.changed = False
             self.rot3.repaint()
+            repaintGps = True
     
         if self.rot4.changed:
             self.gps_comp.setGridRefLO(self.rot4.counter)
             self.rot4.changed = False
             self.rot4.repaint()
             repaintGps = True
+
+        if (self.gps_comp.waypoints != com.waypoints):
+            self.gps_comp.waypoints = com.waypoints
+            repaintGps = True
+
 
         if (repaintGps):
             self.gps_comp.repaint()
@@ -364,6 +371,11 @@ class BottomWidget(ImageWidget):
             self.prev_vals["img_id"] = id(upimg)
             self.image_comp.repaint()
 
+
+    def updateGPS(self):
+        com.getWaypoints()
+        self.gps_comp.setPos(*com.gps_pos)
+        self.gps_comp.repaint()
 
 
 class MainWindow(QWidget):

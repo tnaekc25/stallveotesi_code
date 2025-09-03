@@ -623,6 +623,9 @@ class MapWidget(QWidget):
         self.posy = 0
         self.imgw = 0
         self.imgh = 0
+
+        self.waypoints = []
+        self.current_wp = -1
         
     def updateLayer(self):
         self.setGeometry(self.posx, self.posy, self.imgw, self.imgh)
@@ -645,7 +648,7 @@ class MapWidget(QWidget):
         self.posx = round(pw * self._offx - self.imgw // 2)
         self.posy = round(ph * self._offy - self.imgh // 2)
 
-        self.scale = self.imgw / 350
+        self.scale = self.imgw / 500
 
     def updatePosition(self, lat, lon):
         self.current_lat = lat
@@ -785,6 +788,17 @@ class MapWidget(QWidget):
         line_height = painter.fontMetrics().height()
         for i, line in enumerate(lines):
             painter.drawText(cur_x + self.scaled(25), cur_y - self.scaled(20) + i * line_height, line)
+
+        for waypoint in self.waypoints:
+            cur_x = int((waypoint[2] - self.center_lon) / deg_per_px_x + center_x)
+            cur_y = int((waypoint[1] - self.current_lat) / deg_per_px_y + center_y)
+    
+            glow_color = QColor(0, 100, 255, 180) if self.current_wp != waypoint[0] else QColor(0, 255, 100, 100)
+            line_height = painter.fontMetrics().height()
+
+            painter.setBrush(glow_color)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(cur_x - self.scaled(5), cur_y - self.scaled(5), self.scaled(10), self.scaled(10))
 
         painter.end()
 

@@ -137,17 +137,21 @@ def manual_fire():
 
                     # CHECK TO FIRE
                     if detection_count[clss] >= REQUIRED_DETECTION_COUNT:
-                        hud = telemetry_data.get("VFR_HUD")
+                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
                         attd = telemetry_data.get("ATTITUDE")
+                        hud = telemetry_data.get("VFR_HUD")
                         
-                        if (hud and attd):
+                        if (gps and attd and hud):
+
+                            cralt = gps.relative_alt / 1000
+
                             try:
                                 detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt)
+                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, cralt)
                             except ValueError:
                                 continue
                                 
-                            c = sim.simulate(np.array((0, 0, hud.alt, 0, hud.airspeed, hud.climb)), MDELAY)
+                            c = sim.simulate(np.array((0, 0, cralt, 0, hud.airspeed, hud.climb)), MDELAY)
                             hx, hy = c[0:2]
 
                             projected_hit = (hx, hy, detx, dety, clss)
@@ -250,9 +254,11 @@ def detect_and_fire():
                             detection_count[clss] += 1
                             last_detect[clss] = -1
 
+                            cralt = gps.relative_alt / 1000
+
                             try:
                                 detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt-804)
+                                (box[2] + box[4]) / 2, attd.roll, attd.pitch, cralt)
                             except ValueError as e:
                                 continue
 
@@ -271,16 +277,20 @@ def detect_and_fire():
                     # CHECK TO FIRE
                     elif (headed[clss]):
                         hud = telemetry_data.get("VFR_HUD")
+                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
                         attd = telemetry_data.get("ATTITUDE")
                     
-                        if (hud and attd):
+                        if (hud and attd and gps):
+                    
+                            cralt = gps.relative_alt / 1000
+
                             try:
                                 detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, hud.alt-804)
+                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, cralt)
                             except ValueError:
                                 continue
                                 
-                            c = sim.simulate(np.array((0, 0, hud.alt-804, 0, hud.airspeed, hud.climb)), MDELAY)
+                            c = sim.simulate(np.array((0, 0, cralt, 0, hud.airspeed, hud.climb)), MDELAY)
                             hx, hy = c[0:2]
 
                             projected_hit = (hx, hy, detx, dety, clss)
@@ -528,12 +538,18 @@ def log():
 
             if (1):
                 attd = telemetry_data.get("ATTITUDE")
-                hud = telemetry_data.get("VFR_HUD")
+                gps = telemetry_data.get("GLOBAL_POSITION_INT")
 
-                if (attd and hud):
-                    detx, dety = img_det.get_distance(320,
-                        240, attd.roll, attd.pitch, hud.alt-804)
-                    loggr.raw_print(f"{detx} {dety} {hud.alt-804}", 1)
+                if (attd and gps):
+                    
+                    cralt = gps.relative_alt / 1000
+
+                    try:
+                        detx, dety = img_det.get_distance(320,
+                            240, attd.roll, attd.pitch, cralt)
+                        loggr.raw_print(f"{detx} {dety}", 1)
+                    except:
+                        pass
 
 
         read_check = [0, 0, 0, 0]
@@ -618,6 +634,12 @@ def mainloop():
                     with firing_lock:
                         p.ChangeDutyCycle(NET_PWM)
                         loggr.print("DE-ACTIVATE", 0)
+
+                elif (blst[0].value == 8):
+                    with firing_lock:
+                        loggr.print("GET WAYPOINTS", 0)
+                        self.pixhawk.mav.mission_request_list_send(
+                            self.pixhawk.target_system, self.pixhawk.target_component)
 
                 blst.pop(0)
 
