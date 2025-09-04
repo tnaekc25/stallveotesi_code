@@ -19,7 +19,7 @@ from cscom import MavCom, ImageCom
 os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0' 
 
 upimg = None
-IP = "127.0.0.1" 
+IP = "192.168.0.102" 
 PORT1 = 14550 
 PORT2 = 14551
 

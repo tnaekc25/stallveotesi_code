@@ -14,8 +14,19 @@ class DetectClass:
 		self.fx, self.fy, self.cx, self.cy = fx, fy, cx, cy
 		self.default_pitch = default_pitch
 
-	def get_boxes(self, img, conf):
-		return self.model.predict(img, conf=conf, show = False)[0].boxes
+	def fix_stretch(img, scale_y):
+    	h, w = img.shape[:2]
+    	return cv2.resize(img, (w, int(h * scale_y)))
+
+	def get_boxes(self, img, conf, fix_stretch_scale):
+		raw_box_data = self.model.predict(fix_stretch(img, fix_stretch_scale),
+			conf=conf, show = False)[0].boxes
+		box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
+		
+		return [
+			(clss, x1, round(y1 / fix_stretch_scale), x2, round(y2 / fix_stretch_scale))
+			for clss, x1, y1, x2, y2 in box_data
+		]
 
 	def get_distance(self, x, y, roll, pitch, h):
 		
@@ -134,7 +145,6 @@ class SendClass:
 		return 1
 
 class VideoSave:
-
 	def __init__(self):
 		fourcc = cv2.VideoWriter_fourcc(*"XVID")
 		self.out = cv2.VideoWriter("output.avi", fourcc, 20.0, (640, 480))

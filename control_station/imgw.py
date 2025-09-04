@@ -820,6 +820,10 @@ class MapWidget(QWidget):
 
         for waypoint in self.waypoints:
 
+            if (abs(self.current_lat-waypoint[0]) > 20
+             or abs(self.current_lon-waypoint[1]) > 20):
+                continue
+
             cur_x = int((waypoint[1] - self.center_lon) / deg_per_px_x + center_x)
             cur_y = int((self.center_lat - waypoint[0]) / deg_per_px_y + center_y)
     

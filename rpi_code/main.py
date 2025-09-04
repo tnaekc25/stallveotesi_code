@@ -85,8 +85,7 @@ def direct_fire():
     while (not stop_event.is_set()):
         try:
             if (is_det and (img_feed) is not None and (False in is_shot)):
-                raw_box_data = img_det.get_boxes(img_feed, DET_CONF)
-                box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
+                box_data = img_det.get_boxes(img_feed, DET_CONF, STRETCH_FIX)
 
                 for box in box_data:
                     clss = 1 if box[0] else 0
@@ -123,8 +122,7 @@ def manual_fire():
     while (not stop_event.is_set()):
         try:
             if (is_det and (img_feed) is not None and (False in is_shot)):
-                raw_box_data = img_det.get_boxes(img_feed, DET_CONF)
-                box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
+                box_data = img_det.get_boxes(img_feed, DET_CONF, STRETCH_FIX)
 
                 for box in box_data:
                     clss = 1 if box[0] else 0
@@ -237,8 +235,7 @@ def detect_and_fire():
 
 
             if (is_det and (img_feed) is not None and (False in is_shot)):
-                raw_box_data = img_det.get_boxes(img_feed, DET_CONF)
-                box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
+                box_data = img_det.get_boxes(img_feed, DET_CONF, STRETCH_FIX)
 
                 for box in box_data:
                     clss = 1 if box[0] else 0
@@ -338,8 +335,7 @@ def read_send_img():
                     if (IMG_TEST):
                         if (video):
                             video.out.write(img_feed)
-                    else:
-                        img_send.send(img_feed)
+                    img_send.send(img_feed)
                         
                 
                 read_check[3] += 1
