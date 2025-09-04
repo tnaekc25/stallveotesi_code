@@ -145,6 +145,9 @@ class MavCom:
             self.cont_inputs = tuple([(max(0, min(1, ((x-988) / 993))) if x is not None else 0) for x in self.cont_inputs])
             return 1
 
+        elif msg_type == "MISSION_CURRENT":
+            self.current_wp = msg.seq
+
         elif msg_type == "STATUSTEXT":
             recvd = (msg.text.rstrip('\x00'))
 
@@ -162,19 +165,12 @@ class MavCom:
                             self.right_stat = (spltted[3] == '1')
                             self.is_det = (spltted[4] == '1')
 
+                    elif len(recvd) > 8:
+                        if recvd[0:8] == "WAYPOINT":
+                            spltd = recvd[9:-1].split(',')
+                            wp = (float(spltd[0]), float(spltd[1]), int(float(spltd[2])))
+                            self.waypoints.append(wp)
 
-            return 1
-
-        elif msg_type == "MISSION_COUNT":
-            self.waypoints = []
-            return 1
-
-        elif msg_type == "MISSION_ITEM":
-            self.waypoints.append((msg.seq, msg.x, msg.y))
-            return 1
-
-        elif msg_type == "MISSION_CURRENT":
-            self.current_wp = msg.seq
             return 1
 
         return 0
@@ -236,6 +232,8 @@ class MavCom:
 
 
     def getWaypoints(self):
+        self.waypoints = []
+
         self.mav_out.mav.named_value_int_send(
             int(8*10),
             b"button_data",

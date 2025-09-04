@@ -686,6 +686,24 @@ class MapWidget(QWidget):
     def scaled(self, val):
         return round(self.scale*val)
 
+    def set_wp(self, waypoints):
+        self.waypoints = waypoints
+        
+        x = 0
+        y = 0
+        i = 0
+
+        for wp in waypoints:
+            if (abs(self.current_lat-wp[0]) < 1
+             and abs(self.current_lon-wp[1]) < 1):
+                x += wp[0]
+                y += wp[1]
+                i += 1
+
+        if (i):
+            self.center_lat = x / i
+            self.center_lon = y / i
+
 
     def paintEvent(self, event):
 
@@ -790,15 +808,20 @@ class MapWidget(QWidget):
             painter.drawText(cur_x + self.scaled(25), cur_y - self.scaled(20) + i * line_height, line)
 
         for waypoint in self.waypoints:
-            cur_x = int((waypoint[2] - self.center_lon) / deg_per_px_x + center_x)
-            cur_y = int((waypoint[1] - self.current_lat) / deg_per_px_y + center_y)
+
+            cur_x = int((waypoint[1] - self.center_lon) / deg_per_px_x + center_x)
+            cur_y = int((waypoint[0] - self.current_lat) / deg_per_px_y + center_y)
     
-            glow_color = QColor(0, 100, 255, 180) if self.current_wp != waypoint[0] else QColor(0, 255, 100, 100)
+            glow_color = QColor(0, 100, 255, 180) if self.current_wp != waypoint[2] else QColor(0, 255, 100, 100)
             line_height = painter.fontMetrics().height()
 
             painter.setBrush(glow_color)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(cur_x - self.scaled(5), cur_y - self.scaled(5), self.scaled(10), self.scaled(10))
+
+            painter.setFont(QFont("Consolas", self.scaled(6), QFont.Weight.Bold))
+            painter.setPen(QColor(255, 0, 0, 180))
+            painter.drawText(cur_x + self.scaled(2), cur_y + self.scaled(2), str(waypoint[2]))
 
         painter.end()
 

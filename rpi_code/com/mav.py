@@ -250,3 +250,42 @@ class MavConnect:
             return False
         
         return True
+
+
+    def get_waypoints(self):
+        self.pixhawk.mav.mission_request_list_send(
+            self.pixhawk.target_system, self.pixhawk.target_component)
+
+        msg = self.pixhawk.recv_match(type="MISSION_COUNT", blocking=True, timeout=5)
+            
+        if (not msg):
+            return []
+
+        wp_total = msg.count
+        
+        waypoints = []
+        for i in range(wp_total):
+            self.pixhawk.mav.mission_request_int_send(
+                self.pixhawk.target_system, self.pixhawk.target_component, i)        
+            msg = self.pixhawk.recv_match(type=["MISSION_ITEM", "MISSION_ITEM_INT"], blocking=True, timeout=5)
+
+            if (not msg):
+                return []
+        
+            if msg.get_type() == "MISSION_ITEM_INT":
+                lat, lon, seq = msg.x / 1e7, msg.y / 1e7, msg.seq
+            else:
+                lat, lon, seq = msg.x, msg.y, msg.seq
+        
+            waypoints.append((lat, lon, seq))
+
+        self.pixhawk.mav.mission_ack_send(
+            self.pixhawk.target_system, self.pixhawk.target_component, 0)
+
+        return waypoints
+
+    def send_wp(self, wp):
+        self.gcs_out.mav.statustext_send(
+            severity=6,
+            text=("WAYPOINT"+str(wp)).encode('utf-8')
+        )

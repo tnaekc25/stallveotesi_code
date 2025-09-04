@@ -16,6 +16,10 @@ if (not PC_TEST):
     import RPi.GPIO as GPIO
 
 
+
+
+waypoints = []
+
 #############################
 
 stop_event = Event()
@@ -204,16 +208,22 @@ def detect_and_fire():
                 # GUIDE TO TARGET
                 if ((True not in headed)):
                     if (should_head[clss]):
-                        with comm_lock1, comm_lock2:
-                            while True:
-                                if (mav_com.go_waypoint(tolat, tolon, HIT_ALTITUDE,
-                                    HIT_AIRSPEED, shoot_pos[clss][4], lat, lon, loggr)):
-                                    break
-                                else:
-                                    loggr.print("FAIL AT REPOSITION", 2)
+                        comm_lock1.acquire(blocking=False)
+                        comm_lock2.acquire(blocking=False)
+
+                        while True:
+                            if (mav_com.go_waypoint(tolat, tolon, HIT_ALTITUDE,
+                                HIT_AIRSPEED, shoot_pos[clss][4], lat, lon, loggr)):
+                                break
+                            else:
+                                loggr.print("FAIL AT REPOSITION", 2)
+
                             headed[clss] = True
                             should_head[clss] = False
                             head_time[clss] = time.time()
+
+                        comm_lock1.release()
+                        comm_lock2.release()
 
                 # RETURN IF TIMEOUTS and RESTART DETECTION
                 elif (headed[clss] and time.time()-head_time[clss] > SEARCH_TIMEOUT):
@@ -349,7 +359,7 @@ def read_data():
     while (not stop_event.is_set()):
         try:
 
-            with comm_lock2:
+            if not comm_lock2.locked():
                 inputs = []
     
                 try:
@@ -431,12 +441,12 @@ def read_data():
 # SEND DATA TO GCS AND MISSION PLANNER
 def send_data():
 
-    global telemetry_data, detection_count, is_det
+    global telemetry_data, detection_count, is_det, waypoints, box_data
 
     while (not stop_event.is_set()):
         try:
 
-            with comm_lock1:
+            if not comm_lock1.locked():
                 mav_com.send_heartbeat()
                 mav_com.is_armed = mav_com.check_armed(telemetry_data.get("HEARTBEAT"))
     
@@ -460,6 +470,13 @@ def send_data():
                 # SEND BOXES
                 for box in box_data:
                     mav_com.send_box(box)
+
+                # SEND WAYPOINTS
+                for wp in waypoints:
+                    mav_com.send_wp(wp)
+
+                if (waypoints):
+                    waypoints = []
     
                 time.sleep(SEND_WAIT)
         except Exception as e:
@@ -561,7 +578,7 @@ def log():
 # PROCESS DATA
 def mainloop():
 
-    global gcs_data, is_det, telemetry_data, signal_lost, lost_start
+    global gcs_data, is_det, telemetry_data, signal_lost, lost_start, waypoints
 
     last_channel = -1
     last_rc = -1
@@ -608,12 +625,18 @@ def mainloop():
                         is_shot[0] = 1
 
                 elif (blst[0].value == 1):
-                    with comm_lock1, comm_lock2:
-                        for x in range(ERROR_TRY_COUNT):
-                            if (mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))):
-                                break
-                            else:
-                                print("FAIL ARM")
+                    comm_lock1.acquire(blocking=False)
+                    comm_lock2.acquire(blocking=False)
+                    
+                    for x in range(ERROR_TRY_COUNT):
+                        if (mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))):
+                            break
+                        else:
+                            print("FAIL ARM")
+
+                    comm_lock1.release()
+                    comm_lock2.release()
+
                     loggr.print("ARM TOGGLE TO: " + str(mav_com.is_armed), 0)
 
                 elif (blst[0].value == 2):
@@ -636,10 +659,15 @@ def mainloop():
                         loggr.print("DE-ACTIVATE", 0)
 
                 elif (blst[0].value == 8):
-                    with firing_lock:
-                        loggr.print("GET WAYPOINTS", 0)
-                        self.pixhawk.mav.mission_request_list_send(
-                            self.pixhawk.target_system, self.pixhawk.target_component)
+                    comm_lock1.acquire(blocking=False)
+                    comm_lock2.acquire(blocking=False)
+
+                    loggr.print("GET WAYPOINTS", 0)
+                    
+                    waypoints = mav_com.get_waypoints()
+
+                    comm_lock1.release()
+                    comm_lock2.release()
 
                 blst.pop(0)
 
@@ -712,7 +740,7 @@ try:
         ################## START PIXHAWK CONNECTION ##################
         loggr.print("Starting Pixhawk Connection...", 3)
         if (PC_TEST):
-            pixhawk = mavutil.mavlink_connection('udp:0.0.0.0:31314')
+            pixhawk = mavutil.mavlink_connection('udp:0.0.0.0:31315')
         else:
             pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
         loggr.print("Success!\n", 1)

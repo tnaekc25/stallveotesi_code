@@ -19,7 +19,7 @@ from cscom import MavCom, ImageCom
 os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0' 
 
 upimg = None
-IP = "192.168.0.102" 
+IP = "127.0.0.1" 
 PORT1 = 14550 
 PORT2 = 14551
 
@@ -323,7 +323,11 @@ class BottomWidget(ImageWidget):
             repaintGps = True
 
         if (self.gps_comp.waypoints != com.waypoints):
-            self.gps_comp.waypoints = com.waypoints
+            self.gps_comp.set_wp(com.waypoints)
+            repaintGps = True
+
+        if (self.gps_comp.current_wp != com.current_wp):
+            self.gps_comp.current_wp = com.current_wp
             repaintGps = True
 
 
