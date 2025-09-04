@@ -289,3 +289,5 @@ class MavConnect:
             severity=6,
             text=("WAYPOINT"+str(wp)).encode('utf-8')
         )
+
+        print(wp)

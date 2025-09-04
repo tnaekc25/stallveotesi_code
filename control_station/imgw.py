@@ -603,8 +603,8 @@ class MapWidget(QWidget):
         self.current_lon = lon
         self.curret_head = 0
 
-        self.lat_range = 0.02
-        self.lon_range = 0.02
+        self.lat_range = 0.005
+        self.lon_range = 0.005
 
         self.grid_lon_spacing = 0.007
         self.grid_lat_spacing = 0.007
@@ -626,6 +626,9 @@ class MapWidget(QWidget):
 
         self.waypoints = []
         self.current_wp = -1
+
+        self.dragging = False
+        self.trnf = 0.00003
         
     def updateLayer(self):
         self.setGeometry(self.posx, self.posy, self.imgw, self.imgh)
@@ -660,6 +663,10 @@ class MapWidget(QWidget):
     def setPos(self, lat, lon):
         self.center_lat = lat
         self.center_lon = lon
+
+    def shiftPos(self, diff):
+        self.center_lat += diff[1]
+        self.center_lon += diff[0]
 
 
     def resizeEvent(self, event):
@@ -807,23 +814,70 @@ class MapWidget(QWidget):
         for i, line in enumerate(lines):
             painter.drawText(cur_x + self.scaled(25), cur_y - self.scaled(20) + i * line_height, line)
 
+
+        prev_x = -1000
+        prev_y = -1000
+
         for waypoint in self.waypoints:
 
             cur_x = int((waypoint[1] - self.center_lon) / deg_per_px_x + center_x)
-            cur_y = int((waypoint[0] - self.current_lat) / deg_per_px_y + center_y)
+            cur_y = int((self.center_lat - waypoint[0]) / deg_per_px_y + center_y)
     
             glow_color = QColor(0, 100, 255, 180) if self.current_wp != waypoint[2] else QColor(0, 255, 100, 100)
             line_height = painter.fontMetrics().height()
+
+            neon = QColor(0, 255, 255, 220)
+            pen = QPen(neon)
+            pen.setWidth(self.scaled(3))
+            painter.setPen(pen)
+
+            if (prev_x > -100):
+                painter.drawLine(prev_x, prev_y, cur_x, cur_y)
 
             painter.setBrush(glow_color)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(cur_x - self.scaled(5), cur_y - self.scaled(5), self.scaled(10), self.scaled(10))
 
-            painter.setFont(QFont("Consolas", self.scaled(6), QFont.Weight.Bold))
-            painter.setPen(QColor(255, 0, 0, 180))
-            painter.drawText(cur_x + self.scaled(2), cur_y + self.scaled(2), str(waypoint[2]))
+            painter.setFont(QFont("Consolas", self.scaled(10), QFont.Weight.Bold))
+            painter.setPen(QColor(255, 255, 0, 180))
+            painter.drawText(cur_x - self.scaled(8), cur_y - self.scaled(8), str(waypoint[2]))
+
+            prev_x = cur_x
+            prev_y = cur_y
 
         painter.end()
+
+
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.dragging == False:
+                initial_pos = event.position()
+
+                dx = initial_pos.x() - self.width() / 2
+                dy = self.height() / 2 - initial_pos.y()
+
+                self.last = np.array((dx, dy))
+                self.dragging = True
+
+    def mouseMoveEvent(self, event):
+        if self.dragging:
+            self.update_rotation_from_pos(event.position())
+            self.changed = True
+
+    def mouseReleaseEvent(self, event):
+        self.dragging = False
+
+    def update_rotation_from_pos(self, pos):
+        dx = pos.x() - self.width() / 2
+        dy = self.height() / 2 - pos.y()
+
+        pos = np.array((dx, dy))
+        diff = self.last - np.array((dx, dy))
+
+        self.shiftPos(diff*self.trnf)
+        self.last = pos
+
+        self.update()
 
 
 

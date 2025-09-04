@@ -4,7 +4,7 @@ from imgw import (
     PotentiometerWidget, TapeIndicator
 )
 
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QFileDialog
 from PyQt6.QtCore import Qt, QTimer
 
 import sys
@@ -67,21 +67,18 @@ class BottomWidget(ImageWidget):
         self.gps_comp.setFactors(0.2327, 0.405, 0.2049, 0.3768)
         self.children.append(self.gps_comp)
 
-        self.rot1 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.0005, self)
-        self.rot1.setFactors(0.03125, 0.054, 0.052, 0.55)
+        self.rot1 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.0002, self)
+        self.rot1.setFactors(0.03125, 0.054, 0.052, 0.325)
         self.children.append(self.rot1)
 
-        self.rot2 = PotentiometerWidget("src/dial.png", self, 0.01, 0.001, 0.0005, self)
-        self.rot2.setFactors(0.03125, 0.054, 0.052, 0.50)
+        self.rot2 = PotentiometerWidget("src/dial.png", self, 2, 1, 0.003, self)
+        self.rot2.setFactors(0.03125, 0.054, 0.052, 0.425)
         self.children.append(self.rot2)
 
-        self.rot3 = PotentiometerWidget("src/dial.png", self, 2, 1, 0.003, self)
-        self.rot3.setFactors(0.03125, 0.054, 0.052, 0.20)
-        self.children.append(self.rot3)
-
-        self.rot4 = PotentiometerWidget("src/dial.png", self, 2, 1, 0.003, self)
-        self.rot4.setFactors(0.03125, 0.054, 0.052, 0.25)
-        self.children.append(self.rot4)
+        self.cenbtn = StyledButton2(self, "C", self)
+        self.cenbtn.setFactors(0.016, 0.03, 0.052, 0.375)
+        self.cenbtn.clicked.connect(self.centerGPS)
+        self.children.append(self.cenbtn)
 
         # |||||||||||||||||||||| Sliding Numbers ||||||||||||||||||||||
         self.speednum = FullDigits(self, self.children, 0.409, 0.481, 0.013, self)
@@ -179,19 +176,32 @@ class BottomWidget(ImageWidget):
         self.children.append(self.bt23)
 
         self.bt24 = StyledButton2(self, "MAV", self)
-        self.bt24.setFactors(0.026, 0.045, 0.3, 0.075)
+        self.bt24.setFactors(0.026, 0.045, 0.32, 0.075)
         self.bt24.clicked.connect(lambda : (com.close(), com.connect(IP, PORT1, PORT2)))
         self.children.append(self.bt24)
 
         self.bt25 = StyledButton2(self, "GST", self)
-        self.bt25.setFactors(0.026, 0.045, 0.26, 0.075)
+        self.bt25.setFactors(0.026, 0.045, 0.28, 0.075)
         self.bt25.clicked.connect(lambda : Thread(target = restart_gst).start())
         self.children.append(self.bt25)
 
         self.bt26 = StyledButton2(self, "GPS", self)
-        self.bt26.setFactors(0.026, 0.045, 0.22, 0.075)
+        self.bt26.setFactors(0.026, 0.045, 0.24, 0.075)
         self.bt26.clicked.connect(self.updateGPS)
         self.children.append(self.bt26)
+
+        self.bt27 = StyledButton2(self, "FLE", self)
+        self.bt27.setFactors(0.026, 0.045, 0.2, 0.075)
+        self.bt27.clicked.connect(self.getMissionFile)
+        self.children.append(self.bt27)
+
+        self.bt28 = StyledButton2(self, "MSN", self)
+        self.bt28.setFactors(0.026, 0.045, 0.16, 0.075)
+        self.bt28.clicked.connect(lambda : com.sendMission(self.waypoints))
+        self.children.append(self.bt28)
+
+
+        self.waypoints = []
 
         # |||||||||||||||||||||| Telemetry ||||||||||||||||||||||
 
@@ -300,26 +310,16 @@ class BottomWidget(ImageWidget):
 
         if self.rot1.changed:
             self.gps_comp.setRangeLA(self.rot1.counter)
+            self.gps_comp.setRangeLO(self.rot1.counter)
             self.rot1.changed = False
             self.rot1.repaint()
             repaintGps = True
     
         if self.rot2.changed:
-            self.gps_comp.setRangeLO(self.rot2.counter)
+            self.gps_comp.setGridRefLA(self.rot2.counter)
+            self.gps_comp.setGridRefLO(self.rot2.counter)
             self.rot2.changed = False
             self.rot2.repaint()
-            repaintGps = True
-    
-        if self.rot3.changed:
-            self.gps_comp.setGridRefLA(self.rot3.counter)
-            self.rot3.changed = False
-            self.rot3.repaint()
-            repaintGps = True
-    
-        if self.rot4.changed:
-            self.gps_comp.setGridRefLO(self.rot4.counter)
-            self.rot4.changed = False
-            self.rot4.repaint()
             repaintGps = True
 
         if (self.gps_comp.waypoints != com.waypoints):
@@ -380,6 +380,47 @@ class BottomWidget(ImageWidget):
         com.getWaypoints()
         self.gps_comp.setPos(*com.gps_pos)
         self.gps_comp.repaint()
+
+    def centerGPS(self):
+        self.gps_comp.setPos(*com.gps_pos)
+        self.gps_comp.repaint()
+
+    def getMissionFile(self):
+        mission_file_path, _ = QFileDialog.getOpenFileName(
+            None,
+            "Select a file",
+            "",
+            "Mission Files (*.waypoints);;All Files (*)"
+        )
+
+        if (not mission_file_path):
+            return
+
+        self.waypoints = []
+        with open(mission_file_path, 'r') as f:
+            lines = f.readlines()
+            if not lines[0].startswith("QGC WPL"):
+                print("Invalid waypoint file format")
+            for line in lines[1:]:
+                parts = line.strip().split('\t')
+                if len(parts) < 12:
+                    continue
+                wp = {
+                    "seq": int(parts[0]),
+                    "frame": int(parts[2]),
+                    "command": int(parts[3]),
+                    "param1": float(parts[4]),
+                    "param2": float(parts[5]),
+                    "param3": float(parts[6]),
+                    "param4": float(parts[7]),
+                    "x": float(parts[8]), 
+                    "y": float(parts[9]),
+                    "z": float(parts[10]),
+                    "autocontinue": int(parts[11]),
+                    "current": int(parts[1])
+                }
+                self.waypoints.append(wp)
+
 
 
 class MainWindow(QWidget):

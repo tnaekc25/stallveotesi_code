@@ -358,7 +358,6 @@ def read_data():
 
     while (not stop_event.is_set()):
         try:
-
             if not comm_lock2.locked():
                 inputs = []
     
@@ -445,7 +444,6 @@ def send_data():
 
     while (not stop_event.is_set()):
         try:
-
             if not comm_lock1.locked():
                 mav_com.send_heartbeat()
                 mav_com.is_armed = mav_com.check_armed(telemetry_data.get("HEARTBEAT"))
@@ -670,6 +668,20 @@ def mainloop():
                     comm_lock2.release()
 
                 blst.pop(0)
+
+            countmsg = gcs_data.get("MISSION_COUNT")
+            if (countmsg):
+                comm_lock2.acquire(blocking=False)
+                mav_com.write_pixhawk(countmsg[0].get_msgbuf()) 
+                countmsg.pop(0)
+                comm_lock2.release()
+
+            msnmsg = gcs_data.get("MISSION_ITEM_INT")
+            if (msnmsg):
+                comm_lock2.acquire(blocking=False)
+                mav_com.write_pixhawk(msnmsg[0].get_msgbuf()) 
+                msnmsg.pop(0)
+                comm_lock2.release()
 
             time.sleep(MAIN_WAIT)
 
