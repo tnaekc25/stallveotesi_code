@@ -7,4 +7,4 @@ class RocketModel:
 		self.cd_model = cd_path
 
 	def cd(self, spd):
-		return 0.26
+		return 0.5

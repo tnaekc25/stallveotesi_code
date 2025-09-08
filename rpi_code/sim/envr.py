@@ -9,7 +9,7 @@ class EnvironmentModel:
 		self.ro_model = ro_path
 
 	def ro(self, alt):
-		return 1.293-(alt/10000)*0.8
+		return 1.293
 
 	def wind(self, alt):
 		return np.array((0, 0, 0))
