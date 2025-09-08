@@ -628,7 +628,7 @@ class MapWidget(QWidget):
         self.current_wp = -1
 
         self.dragging = False
-        self.trnf = 0.00003
+        self.trnf = 0.000015
         
     def updateLayer(self):
         self.setGeometry(self.posx, self.posy, self.imgw, self.imgh)
@@ -671,6 +671,18 @@ class MapWidget(QWidget):
 
     def resizeEvent(self, event):
         pass
+
+
+    def shiftRange(self, shift):
+        self.lat_range += shift
+        self.lat_range = max(self.lat_range, 0.0001)
+
+        self.grid_lat_spacing = self.lat_range / self.grid_lat_ref
+
+        self.lon_range += shift
+        self.lon_range = max(self.lon_range, 0.0001)
+
+        self.grid_lon_spacing = self.lon_range / self.grid_lon_ref
 
 
     def setRangeLA(self, rangev):
@@ -880,6 +892,15 @@ class MapWidget(QWidget):
 
         self.shiftPos(diff*self.trnf)
         self.last = pos
+
+        self.update()
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y()
+        if delta > 0:
+            self.shiftRange(-0.0005)
+        else:
+            self.shiftRange(0.0005)
 
         self.update()
 
