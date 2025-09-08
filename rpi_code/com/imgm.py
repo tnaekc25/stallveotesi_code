@@ -14,19 +14,32 @@ class DetectClass:
 		self.fx, self.fy, self.cx, self.cy = fx, fy, cx, cy
 		self.default_pitch = default_pitch
 
-	def fix_stretch(img, scale_y):
-    	h, w = img.shape[:2]
-    	return cv2.resize(img, (w, int(h * scale_y)))
+	def preprocess(self, img):
+	    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+	    lower_blue = np.array([50, 120, 150])
+	    upper_blue = np.array([170, 255, 255])
+	    mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
+	    mask_blue_b = cv2.boxFilter(mask_blue, -1, (55, 55))
+	    mask_blue_f = (mask_blue_b.astype(np.float32) / 255.0)[..., None]
+	    target_blue = np.array([155, 76, 41], dtype=np.float32) 
+	    mask_soft = cv2.normalize(mask_blue_f, None, 0, 255, cv2.NORM_MINMAX)
+	    mask_soft = (mask_soft.astype(np.float32) / 255.0)[..., None]
+	    
+	    mask_binary = (mask_blue.astype(np.float32) / 255.0)[..., None]
+	    mask_final = mask_soft * mask_binary    
+	    boosted = img.astype(np.float32)
+	    alpha = 0.9
+	    boosted = boosted * (1 - alpha * mask_final) + target_blue * (alpha * mask_final)
+	    kernel = np.array([[0, -1,  0],
+	                       [-1,  5, -1],
+	                       [0, -1,  0]])
+	    sharpened = cv2.filter2D(np.clip(boosted, 0, 255).astype(np.uint8), -1, kernel)
+	    return sharpened
 
-	def get_boxes(self, img, conf, fix_stretch_scale):
-		raw_box_data = self.model.predict(fix_stretch(img, fix_stretch_scale),
-			conf=conf, show = False)[0].boxes
-		box_data = [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
-		
-		return [
-			(clss, x1, round(y1 / fix_stretch_scale), x2, round(y2 / fix_stretch_scale))
-			for clss, x1, y1, x2, y2 in box_data
-		]
+
+	def get_boxes(self, img, conf):
+		raw_box_data = self.model.predict(self.preprocess(img), conf=conf, show = False)[0].boxes
+		return [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
 
 	def get_distance(self, x, y, roll, pitch, h):
 		
@@ -45,7 +58,7 @@ class DetectClass:
 		ground_point = t * r_world
 		dx, dy = ground_point[0], ground_point[1]
 	
-		return dx, -dy
+		return dx, dy
 
 	def pos_to_gps(self, gps, hud, x, y):
 		a = 6378137.0
@@ -77,11 +90,11 @@ class DetectClass:
 
 class RecvClass:
 
-	def __init__(self):
+	def __init__(self, fps, width, height):
 
 		self.gst_pipeline = (
     		"libcamerasrc ! "
-    		"video/x-raw,width=640,height=480,format=NV12,framerate=30/1 ! "
+    		f"video/x-raw,width={width},height={height},format=NV12,framerate={fps}/1 ! "
     		"videoconvert ! appsink")
 
 		self.is_open = False
@@ -109,7 +122,7 @@ class RecvClass:
 
 
 class SendClass:
-	def __init__(self, ip, port, fps = 30, width = 640, height = 480):
+	def __init__(self, ip, port, fps, width, height):
 
 		self.gst_pipeline = (
     f'appsrc ! '
@@ -145,9 +158,9 @@ class SendClass:
 		return 1
 
 class VideoSave:
-	def __init__(self):
+	def __init__(self, fps, width, height):
 		fourcc = cv2.VideoWriter_fourcc(*"XVID")
-		self.out = cv2.VideoWriter("output.avi", fourcc, 20.0, (640, 480))
+		self.out = cv2.VideoWriter("output.avi", fourcc, fps, (width, height))
 
 		
 
