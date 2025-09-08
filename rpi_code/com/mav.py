@@ -20,10 +20,11 @@ class MavConnect:
         self.sock = None
 
         self.testing = False
+        self.mode_arr = {10:5, 5:0, 0:10}
 
-        self.is_armed = False
-        self.control_mode = None
-
+    def init(self, heartbeat):
+        self.is_armed = self.check_armed(heartbeat)
+        self.control_mode = self.get_mode(heartbeat)
 
     def connect_gcs(self, ip, port1, port2):
 
@@ -90,6 +91,15 @@ class MavConnect:
 
 
     def send_fail(self):
+
+        self.pixhawk.mav.set_mode_send(
+            self.pixhawk.target_system,
+            mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            0
+        )
+
+        time.sleep(0.1)
+
         self.pixhawk.mav.rc_channels_override_send(
                 self.pixhawk.target_system,
                 self.pixhawk.target_component,
@@ -116,14 +126,6 @@ class MavConnect:
     def check_armed(self, heartbeat):
         if heartbeat:
             return (heartbeat.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED) != 0
-        return False
-
-    def is_auto(self, heartbeat):
-        if heartbeat and hasattr(self.pixhawk, 'mode_mapping'):
-            mode_map = self.pixhawk.mode_mapping()
-            reversed_map = {v: k for k, v in mode_map.items()}
-            current_mode_name = reversed_map.get(heartbeat.custom_mode) 
-            return current_mode_name == 'AUTO'
         return False
 
 
@@ -158,7 +160,54 @@ class MavConnect:
 
         return True
 
+    def preflight(self):            
+        self.pixhawk.mav.command_long_send(
+            self.pixhawk.target_system, 
+            self.pixhawk.target_component,
+            mavutil.mavlink.MAV_CMD_PREFLIGHT_CALIBRATION,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0
+        )
 
+        time.sleep(0.1)
+
+        ack = self.pixhawk.recv_match(type='COMMAND_ACK', blocking=True, timeout=5)
+        if ack and ack.command == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
+            if ack.result != mavutil.mavlink.MAV_RESULT_ACCEPTED:
+                return False
+
+        return True
+
+    def abort_land(self):            
+        self.pixhawk.mav.command_long_send(
+            self.pixhawk.target_system,
+            self.pixhawk.target_component,
+            mavutil.mavlink.MAV_CMD_DO_GO_AROUND,
+            0,
+            0, 0, 0, 0, 0, 0, 0
+        )
+
+        time.sleep(0.1)
+        
+        ack = self.pixhawk.recv_match(type='COMMAND_ACK', blocking=True, timeout=5)
+        if ack and ack.command == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
+            if ack.result != mavutil.mavlink.MAV_RESULT_ACCEPTED:
+                return False
+
+
+        return True
+
+
+    def get_mode(self, heartbeat):
+        if heartbeat and hasattr(self.pixhawk, 'mode_mapping'):
+            return heartbeat.custom_mode
+        return False
 
 
     def toggle_control(self, heartbeat):
@@ -167,16 +216,13 @@ class MavConnect:
             return
 
         mode_map = self.pixhawk.mode_mapping()
-        self.control_mode = 'MANUAL' if self.is_auto(heartbeat) else 'AUTO'
-        mode_id = mode_map.get(self.control_mode)
-
-        if (not mode_id):
-            return
+        self.control_mode = self.mode_arr.get(self.get_mode(heartbeat))
+        self.control_mode = self.control_mode if self.control_mode else 0
 
         self.pixhawk.mav.set_mode_send(
             self.pixhawk.target_system,
             mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-            mode_id
+            self.control_mode
         )
     
 
