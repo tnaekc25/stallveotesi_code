@@ -19,7 +19,7 @@ from cscom import MavCom, ImageCom
 os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0' 
 
 upimg = None
-IP = "192.168.0.102" 
+IP = "10.176.102.118" 
 PORT1 = 14550 
 PORT2 = 14551
 
@@ -190,7 +190,7 @@ class BottomWidget(ImageWidget):
         self.bt26.clicked.connect(self.updateGPS)
         self.children.append(self.bt26)
 
-        self.bt27 = StyledButton2(self, "FLE", self)
+        self.bt27 = StyledButton2(self, "FLS", self)
         self.bt27.setFactors(0.026, 0.045, 0.2, 0.075)
         self.bt27.clicked.connect(self.getMissionFile)
         self.children.append(self.bt27)
@@ -201,7 +201,18 @@ class BottomWidget(ImageWidget):
         self.children.append(self.bt28)
 
 
-        self.waypoints = []
+        self.bt29 = StyledButton2(self, "CAL", self)
+        self.bt29.setFactors(0.026, 0.045, 0.16, 0.8)
+        self.bt29.clicked.connect(lambda : com.send_button(11))
+        self.children.append(self.bt29)
+
+        self.bt30 = StyledButton2(self, "LAN", self)
+        self.bt30.setFactors(0.026, 0.045, 0.12, 0.8)
+        self.bt30.clicked.connect(lambda : com.send_button(12))
+        self.children.append(self.bt30)
+
+
+        self.waypoints = {}
 
         # |||||||||||||||||||||| Telemetry ||||||||||||||||||||||
 
@@ -364,7 +375,7 @@ class BottomWidget(ImageWidget):
         self.telem.setText(self.telem_text.format(*[format(x, ".4g") if type(x) != str else x for x in (
             com.airspeed, com.altitude, com.heading, 0,
             roll*360, pitch*360, com.attitude[2] * (360 / (np.pi * 2)),
-            "YES" if com.is_armed else "NO", "MANUAL" if com.control_mode else "AUTO",
+            "YES" if com.is_armed else "NO", com.control_mode,
             f"{'Y' if com.left_stat else 'N'} - {'Y' if com.right_stat else 'N'}",
             com.battery_per, com.battery_volt, com.cont_inputs[0])]))
 
@@ -396,7 +407,7 @@ class BottomWidget(ImageWidget):
         if (not mission_file_path):
             return
 
-        self.waypoints = []
+        self.waypoints = {}
         with open(mission_file_path, 'r') as f:
             lines = f.readlines()
             if not lines[0].startswith("QGC WPL"):
@@ -419,7 +430,7 @@ class BottomWidget(ImageWidget):
                     "autocontinue": int(parts[11]),
                     "current": int(parts[1])
                 }
-                self.waypoints.append(wp)
+                self.waypoints[int(parts[0])] = wp
 
 
 
