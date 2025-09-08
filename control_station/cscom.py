@@ -6,7 +6,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QPalette, QColor, QFont
 
 
 from pymavlink import mavutil
-from threading import Thread, Lock
+from threading import Thread, Event
 from random import randint
 
 
@@ -50,7 +50,7 @@ class MavCom:
         self.waypoints = []
         self.current_wp = -1
 
-        self.comm_lock = Lock()
+        self.cont_map = {0:"MANUAL", 5:"FBWA", 10:"AUTO"}
 
 
         #self.fp = open("out.txt", "r")
@@ -104,79 +104,79 @@ class MavCom:
 
     def recv_message(self):
 
-        with self.comm_lock:
+        msg = self.mav_in.recv_match(blocking=True)
+        if not msg:
+            return 0
+    
+        msg_type = msg.get_type()
+    
+        if msg_type == "HEARTBEAT":
+            self.last_heartbeat = time.time()
+            self.connected = True
+            #print(f">>> HEARTBEAT RECV AT {self.last_heartbeat-self.start_time}")
 
-            msg = self.mav_in.recv_match(blocking=True)
-            if not msg:
-                return 0
-        
-            msg_type = msg.get_type()
-        
-            if msg_type == "HEARTBEAT":
-                self.last_heartbeat = time.time()
-                self.connected = True
-                #print(f">>> HEARTBEAT RECV AT {self.last_heartbeat-self.start_time}")
+            return 1
+
+        # Attitude
+        elif msg_type == "ATTITUDE":
+            self.attitude = (msg.roll, msg.pitch, msg.yaw)
+            return 1
     
-                return 1
+        # Airspeed, Ground speed, Altitude, Heading
+        elif msg_type == "VFR_HUD":
+            self.airspeed = msg.airspeed
+            self.ground_speed = msg.groundspeed
+            self.vertical_speed = msg.climb
+            self.heading = msg.heading
+            return 1
     
-            # Attitude
-            elif msg_type == "ATTITUDE":
-                self.attitude = (msg.roll, msg.pitch, msg.yaw)
-                return 1
-        
-            # Airspeed, Ground speed, Altitude, Heading
-            elif msg_type == "VFR_HUD":
-                self.airspeed = msg.airspeed
-                self.ground_speed = msg.groundspeed
-                self.vertical_speed = msg.climb
-                self.heading = msg.heading
-                return 1
-        
-            # GPS Position
-            elif msg_type == "GLOBAL_POSITION_INT":
-                self.gps_pos = (msg.lat / 1e7, msg.lon / 1e7)
-                self.altitude = (msg.relative_alt / 1000) if msg.relative_alt > 0 else 0
-                return 1
-        
-            # Battery Status
-            elif msg_type == "SYS_STATUS":
-                self.battery_volt = msg.voltage_battery / 1000.0
-                self.battery_per = msg.battery_remaining
-                return 1
-        
-            # Control Inputs (throttle, roll, pitch, yaw)
-            elif msg_type == "RC_CHANNELS":
-                self.cont_inputs = [msg.chan3_raw, msg.chan1_raw, msg.chan2_raw, msg.chan4_raw]
-                self.cont_inputs = tuple([(max(0, min(1, ((x-988) / 993))) if x is not None else 0) for x in self.cont_inputs])
-                return 1
+        # GPS Position
+        elif msg_type == "GLOBAL_POSITION_INT":
+            self.gps_pos = (msg.lat / 1e7, msg.lon / 1e7)
+            self.altitude = (msg.relative_alt / 1000) if msg.relative_alt > 0 else 0
+            return 1
     
-            elif msg_type == "MISSION_CURRENT":
-                self.current_wp = msg.seq
+        # Battery Status
+        elif msg_type == "SYS_STATUS":
+            self.battery_volt = msg.voltage_battery / 1000.0
+            self.battery_per = msg.battery_remaining
+            return 1
     
-            elif msg_type == "STATUSTEXT":
-                recvd = (msg.text.rstrip('\x00'))
-    
-                if len(recvd) > 6:
-                    if recvd[0:6] == "BOXINF":
-                        self.boxes.append(tuple(map(int, recvd[7:-1].split(','))))
-    
-                    elif len(recvd) > 7:
-                        if recvd[0:7] == "STATINF":
-                            spltted = list(recvd[7:])
-                            if (len(spltted) > 4):
-                                self.is_armed = (spltted[0] == '1')
-                                self.control_mode = (spltted[1] == '1')
-                                self.left_stat = (spltted[2] == '1')
-                                self.right_stat = (spltted[3] == '1')
-                                self.is_det = (spltted[4] == '1')
-    
-                        elif len(recvd) > 8:
-                            if recvd[0:8] == "WAYPOINT":
-                                spltd = recvd[9:-1].split(',')
-                                wp = (float(spltd[0]), float(spltd[1]), int(float(spltd[2])))
-                                self.waypoints.append(wp)
-    
-                return 1
+        # Control Inputs (throttle, roll, pitch, yaw)
+        elif msg_type == "RC_CHANNELS":
+            self.cont_inputs = [msg.chan3_raw, msg.chan1_raw, msg.chan2_raw, msg.chan4_raw]
+            self.cont_inputs = tuple([(max(0, min(1, ((x-988) / 993))) if x is not None else 0) for x in self.cont_inputs])
+            return 1
+
+        elif msg_type == "MISSION_CURRENT":
+            self.current_wp = msg.seq
+
+        elif msg_type == "STATUSTEXT":
+            recvd = (msg.text.rstrip('\x00'))
+
+            if len(recvd) > 6:
+                if recvd[0:6] == "BOXINF":
+                    self.boxes.append(tuple(map(int, recvd[7:-1].split(','))))
+
+                elif len(recvd) > 7:
+                    if recvd[0:7] == "STATINF":
+                        spltted = recvd[7:].split(",")
+                        if (len(spltted) > 4):
+                            self.is_armed = (spltted[0] == '1')
+                            self.control_mode = self.cont_map.get(int(spltted[1]))
+                            self.control_mode = self.control_mode if self.control_mode else "UNWN"
+
+                            self.left_stat = (spltted[2] == '1')
+                            self.right_stat = (spltted[3] == '1')
+                            self.is_det = (spltted[4] == '1')
+
+                    elif len(recvd) > 8:
+                        if recvd[0:8] == "WAYPOINT":
+                            spltd = recvd[9:-1].split(',')
+                            wp = (float(spltd[0]), float(spltd[1]), int(float(spltd[2])))
+                            self.waypoints.append(wp)
+
+            return 1
 
         return 0
 
@@ -237,6 +237,10 @@ class MavCom:
 
 
     def getWaypoints(self):
+        
+        if (not self.connected):
+            return
+
         self.waypoints = []
 
         self.mav_out.mav.named_value_int_send(
@@ -251,8 +255,6 @@ class MavCom:
         if (not self.connected):
             return
 
-        self.comm_lock.acquire(blocking=False)
-
         self.mav_out.mav.mission_count_send(
             self.mav_out.target_system,
             self.mav_out.target_component,
@@ -260,10 +262,13 @@ class MavCom:
             mavutil.mavlink.MAV_MISSION_TYPE_MISSION
         )
 
-        for wp in waypoints:
-            msg = self.mav_in.recv_match(type='MISSION_REQUEST_INT', blocking=True)
-            seq = msg.seq
-        
+        i = 0
+
+        while i < len(waypoints):
+            msg = self.mav_in.recv_match(type='MISSION_REQUEST', blocking=True, timeout = 10)
+            i = seq = msg.seq
+            
+            print(msg)
             w = waypoints[seq]
         
             self.mav_out.mav.mission_item_int_send(
@@ -285,7 +290,14 @@ class MavCom:
 
             print(f"Sent waypoint {seq}")  
 
-        self.comm_lock.release()
+            if (i == len(waypoints)-1):
+                while True: 
+                    ack = self.mav_in.recv_match(type='MISSION_ACK', blocking=False)
+                    if ack:
+                        if ack.type == mavutil.mavlink.MAV_MISSION_ACCEPTED:
+                            print("Mission successfully uploaded!")
+                            i += 1
+                            break
 
 
 class ImageCom:
