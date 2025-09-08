@@ -1,6 +1,7 @@
 from pymavlink import mavutil
-import time, select, numpy as np, sys, subprocess
-from threading import Thread, Lock, Event
+import time, select, numpy as np, sys, psutil
+from threading import Thread, Event, Lock
+from queue import Queue
 from com.mav import MavConnect
 from com.imgm import RecvClass, SendClass, DetectClass, VideoSave
 
@@ -30,7 +31,8 @@ telemetry_data = {}
 gcs_data = {}
 box_data = []
 
-img_feed = None
+frame_queue = Queue(maxsize=2)
+
 is_det = False
 
 loggr = Log()
@@ -44,8 +46,15 @@ lost_start = -1
 #############################
 
 firing_lock = Lock()
-comm_lock1 = Lock()
-comm_lock2 = Lock()
+
+comm_event1 = Event()
+comm_event12 = Event()
+comm_event2 = Event()
+comm_event22 = Event()
+
+comm_event1.set()
+comm_event2.set()
+
 
 detection_count = [0, 0]
 last_detect = [-1, -1]
@@ -80,12 +89,19 @@ def distn(lat1, lon1, lat2, lon2):
 
 
 def direct_fire():
-    global box_data, telemetry_data, detection_count, last_detect, is_shot, projected_hit
+    global box_data, telemetry_data, detection_count, last_detect, is_shot, projected_hit, frame_queue
 
     while (not stop_event.is_set()):
         try:
-            if (is_det and (img_feed) is not None and (False in is_shot)):
-                box_data = img_det.get_boxes(img_feed, DET_CONF, STRETCH_FIX)
+            img_feed = None
+            try:
+                if not frame_queue.empty():
+                    img_feed = frame_queue.get_nowait()
+            except:
+                pass
+
+            if (is_det and img_feed is not None and (False in is_shot)):
+                box_data = img_det.get_boxes(img_feed, DET_CONF)
 
                 for box in box_data:
                     clss = 1 if box[0] else 0
@@ -103,8 +119,14 @@ def direct_fire():
                     # CHECK TO FIRE
                     if detection_count[clss] >= REQUIRED_DETECTION_COUNT:
                         p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                        time.sleep(PWMRET_WAIT)
+                        p.ChangeDutyCycle(NET_PWM)
+                        time.sleep(PWM_WAIT)
+                        p.ChangeDutyCycle(0)
+
+                        p.ChangeDutyCycle(0)
                         for x in range(3):
-                            loggr.print(">>> DIRECT SHOOT")
+                            loggr.print(">>> DIRECT SHOOT", 1)
                         is_shot[clss] = 1
 
             time.sleep(DET_WAIT)
@@ -121,8 +143,15 @@ def manual_fire():
 
     while (not stop_event.is_set()):
         try:
+
+            try:
+                if not frame_queue.empty():
+                    img_feed = frame_queue.get_nowait()
+            except:
+                img_feed = None
+
             if (is_det and (img_feed) is not None and (False in is_shot)):
-                box_data = img_det.get_boxes(img_feed, DET_CONF, STRETCH_FIX)
+                box_data = img_det.get_boxes(img_feed, DET_CONF)
 
                 for box in box_data:
                     clss = 1 if box[0] else 0
@@ -161,6 +190,10 @@ def manual_fire():
                             if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
                                 with firing_lock:
                                     p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                                    time.sleep(PWMRET_WAIT)
+                                    p.ChangeDutyCycle(NET_PWM)
+                                    time.sleep(PWM_WAIT)
+                                    p.ChangeDutyCycle(0)
                                     for x in range(3):
                                         loggr.print(">>> AUTO SHOOT")
                                     is_shot[clss] = 1
@@ -206,8 +239,11 @@ def detect_and_fire():
                 # GUIDE TO TARGET
                 if ((True not in headed)):
                     if (should_head[clss]):
-                        comm_lock1.acquire(blocking=False)
-                        comm_lock2.acquire(blocking=False)
+                        comm_event1.clear()
+                        comm_event2.clear()
+    
+                        comm_event12.wait()
+                        comm_event22.wait()
 
                         while True:
                             if (mav_com.go_waypoint(tolat, tolon, HIT_ALTITUDE,
@@ -220,8 +256,8 @@ def detect_and_fire():
                             should_head[clss] = False
                             head_time[clss] = time.time()
 
-                        comm_lock1.release()
-                        comm_lock2.release()
+                        comm_event1.set()
+                        comm_event2.set()
 
                 # RETURN IF TIMEOUTS and RESTART DETECTION
                 elif (headed[clss] and time.time()-head_time[clss] > SEARCH_TIMEOUT):
@@ -233,6 +269,12 @@ def detect_and_fire():
                     detection_count[clss] = 0
                     last_detect[clss] = -1
 
+
+            try:
+                if not frame_queue.empty():
+                    img_feed = frame_queue.get_nowait()
+            except:
+                img_feed = None
 
             if (is_det and (img_feed) is not None and (False in is_shot)):
                 box_data = img_det.get_boxes(img_feed, DET_CONF, STRETCH_FIX)
@@ -305,6 +347,10 @@ def detect_and_fire():
                             if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
                                 with firing_lock:
                                     p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                                    time.sleep(PWMRET_WAIT)
+                                    p.ChangeDutyCycle(NET_PWM)
+                                    time.sleep(PWM_WAIT)
+                                    p.ChangeDutyCycle(0)
                                     is_shot[clss] = 1
 
                                 headed[clss] = False
@@ -323,7 +369,7 @@ def detect_and_fire():
 ## READ AND SEND IMG
 def read_send_img():
 
-    global img_feed, video, img_recv, img_send
+    global frame_queue, video, img_recv, img_send
 
     while (not stop_event.is_set()):
         try:
@@ -332,6 +378,19 @@ def read_send_img():
                 img_feed = img_recv.recv()
                 
                 if (img_feed is not None):
+
+                    try:
+                        frame_queue.put_nowait(img_feed)
+                    except:
+                        try:
+                            if not frame_queue.full():
+                                frame_queue.put_nowait(img_feed.copy())
+                            else: 
+                                frame_queue.get_nowait()
+                                frame_queue.put_nowait(img_feed.copy())
+                        except:
+                            pass
+
                     if (IMG_TEST):
                         if (video):
                             video.out.write(img_feed)
@@ -354,69 +413,84 @@ def read_data():
 
     while (not stop_event.is_set()):
         try:
-            if not comm_lock2.locked():
-                inputs = []
-    
-                try:
-                    if (mav_com.sock):
-                        if (mav_com.sock.fileno() >= 0):
-                            inputs.append(mav_com.sock)
-                except:
-                    loggr.print("socket error before select", 2)
-    
-    
-                try:
-                    if (mav_com.pixhawk):
-                        fd = mav_com.pixhawk.fd
-                        if (fd is not None and fd >= 0):
-                            inputs.append(fd)
-                except:
-                    loggr.print("mavlink error before select 1", 2)
-    
-    
-                try:
-                    if (mav_com.gcs_in):
-                        fd = mav_com.gcs_in.fd
-                        if (fd is not None and fd >= 0):
-                            inputs.append(fd)
-                except:
-                    loggr.print("mavlink error before select 2", 2)
-    
-    
-                if (not inputs):
-                    time.sleep(RECV_WAIT)
-                    continue
-    
-    
-                readable, _, _ = select.select(
-                    inputs,
-                    [], [], 0.01)
-                
-                if (mav_com.pixhawk and mav_com.pixhawk.fd in readable and mav_com.mav_connected):
-                    msg = mav_com.read_pixhawk()        
-                    if (msg):                        
-                        telemetry_data[msg.get_type()] = msg
-                        mav_com.send_planner(msg.get_msgbuf())
-                        write_check[1] += 1
-                        read_check[0] += 1
-    
-                if (mav_com.sock in readable and mav_com.sock_connected):
-                    planner_data = mav_com.read_planner()
-                    if (planner_data):
-                        mav_com.write_pixhawk(planner_data) 
-                        write_check[0] += 1
-                        read_check[1] += 1
-    
-                if (mav_com.gcs_in and mav_com.gcs_in.fd in readable and mav_com.mav_connected):
-                    msg = mav_com.get_gcs()
-                    if (msg):
-                        if (gcs_data.get(msg.get_type()) == None):
-                            gcs_data[msg.get_type()] = [msg]
-                        else:
-                            gcs_data[msg.get_type()].append(msg)
-    
-                        read_check[2] += 1
+            comm_event2.wait()
+            comm_event22.clear()
 
+            inputs = []
+
+            try:
+                if (mav_com.sock):
+                    if (mav_com.sock.fileno() >= 0):
+                        inputs.append(mav_com.sock)
+            except:
+                loggr.print("socket error before select", 2)
+
+
+            try:
+                if (mav_com.pixhawk):
+                    fd = mav_com.pixhawk.fd
+                    if (fd is not None and fd >= 0):
+                        inputs.append(fd)
+            except:
+                loggr.print("mavlink error before select 1", 2)
+
+
+            try:
+                if (mav_com.gcs_in):
+                    fd = mav_com.gcs_in.fd
+                    if (fd is not None and fd >= 0):
+                        inputs.append(fd)
+            except:
+                loggr.print("mavlink error before select 2", 2)
+
+
+            if (not inputs):
+                time.sleep(RECV_WAIT)
+                continue
+
+
+            readable, _, _ = select.select(
+                inputs,
+                [], [], 0.01)
+            
+            if (mav_com.pixhawk and mav_com.pixhawk.fd in readable and mav_com.mav_connected):
+                msg = mav_com.read_pixhawk()        
+                if (msg):         
+                    
+                    if (USE_GCS_MSN):
+                        if (msg.get_type() == "MISSION_REQUEST"):    
+                            mav_com.send_gcs(msg)
+                        else:
+                            telemetry_data[msg.get_type()] = msg
+    
+                        telemetry_data[msg.get_type()] = msg               
+                    
+                    mav_com.send_planner(msg.get_msgbuf())
+                    write_check[1] += 1
+                    read_check[0] += 1
+
+            if (mav_com.sock in readable and mav_com.sock_connected):
+                planner_data = mav_com.read_planner()
+                if (planner_data):
+                    mav_com.write_pixhawk(planner_data) 
+                    write_check[0] += 1
+                    read_check[1] += 1
+
+            if (mav_com.gcs_in and mav_com.gcs_in.fd in readable and mav_com.mav_connected):
+                msg = mav_com.get_gcs()
+                if (msg):
+                    if msg.get_type() == ("MISSION_COUNT"):
+                        mav_com.write_pixhawk(msg.get_msgbuf())
+                    elif msg.get_type() == "MISSION_ITEM_INT":
+                        mav_com.write_pixhawk(msg.get_msgbuf())
+                    if (gcs_data.get(msg.get_type()) == None):
+                        gcs_data[msg.get_type()] = [msg]
+                    else:
+                        gcs_data[msg.get_type()].append(msg)
+
+                    read_check[2] += 1
+
+            comm_event22.set()
             time.sleep(RECV_WAIT)
         
         except Exception as e:
@@ -440,39 +514,44 @@ def send_data():
 
     while (not stop_event.is_set()):
         try:
-            if not comm_lock1.locked():
-                mav_com.send_heartbeat()
-                mav_com.is_armed = mav_com.check_armed(telemetry_data.get("HEARTBEAT"))
-    
-                for _, msg in list(telemetry_data.items()):
-                        if (msg) and not msg.get_type().startswith("UNKNOWN_"):
-                            mav_com.send_gcs(msg)
-                            write_check[2] += 1
-    
-                # SEND INFO
-                mav_com.gcs_out.mav.statustext_send(
-                    severity=6,
-                    text=("STATINF"
-                    + ('1' if mav_com.is_armed else '0')
-                    + ('1' if (mav_com.control_mode == 'MANUAL') else '0')
-                    + ('1' if detection_count[0] >= 0 else '0')
-                    + ('1' if detection_count[1] >= 0 else '0')
-                    + ('1' if is_det else '0')
-                    ).encode('utf-8')
-                )
-    
-                # SEND BOXES
-                for box in box_data:
-                    mav_com.send_box(box)
 
-                # SEND WAYPOINTS
-                for wp in waypoints:
-                    mav_com.send_wp(wp)
+            comm_event1.wait()
+            comm_event12.clear()
 
-                if (waypoints):
-                    waypoints = []
-    
-                time.sleep(SEND_WAIT)
+            mav_com.send_heartbeat()
+            mav_com.is_armed = mav_com.check_armed(telemetry_data.get("HEARTBEAT"))
+            mav_com.control_mode = mav_com.get_mode(telemetry_data.get("HEARTBEAT"))
+            mav_com.control_mode = mav_com.control_mode if mav_com.control_mode else 0
+
+            for _, msg in list(telemetry_data.items()):
+                    if (msg and not msg.get_type().startswith("UNKNOWN_")):
+                        mav_com.send_gcs(msg)
+                        write_check[2] += 1
+
+            # SEND INFO
+            mav_com.gcs_out.mav.statustext_send(
+                severity=6,
+                text=("STATINF"
+                + ('1' if mav_com.is_armed else '0') + ','
+                + (str(mav_com.control_mode)) + ','
+                + ('1' if detection_count[0] >= 0 else '0') + ','
+                + ('1' if detection_count[1] >= 0 else '0') + ','
+                + ('1' if is_det else '0') + ','
+                ).encode('utf-8')
+            )
+
+            # SEND BOXES
+            for box in box_data:
+                mav_com.send_box(box)
+            # SEND WAYPOINTS
+            for wp in waypoints:
+                mav_com.send_wp(wp)
+            if (waypoints):
+                waypoints = []
+
+            comm_event12.set()
+            time.sleep(SEND_WAIT)
+
         except Exception as e:
             loggr.print("ERROR AT THREAD 3 " + str(e), 2)
             time.sleep(ERROR_WAIT)
@@ -544,7 +623,13 @@ def log():
             else:
                 loggr.raw_print("NO HIT PROJECTION", 2, "")
 
-            loggr.raw_print(" |", 0, "\n\n") 
+            loggr.raw_print(" |", 0)
+
+            temp = psutil.sensors_temperatures().get('cpu_thermal', [{}])[0].current
+            cpu = psutil.cpu_percent()
+            mem = psutil.virtual_memory().percent
+            loggr.raw_print("temp:" + str(temp) + " | cpu:" + str(cpu) + " | mem:" + str(mem), 3, "")
+            loggr.raw_print(" |", 0) 
 
 
             if (1):
@@ -561,6 +646,8 @@ def log():
                         loggr.raw_print(f"{detx} {dety}", 1)
                     except:
                         pass
+
+            loggr.raw_print(" |", 0, "\n\n") 
 
 
         read_check = [0, 0, 0, 0]
@@ -616,20 +703,33 @@ def mainloop():
                     with firing_lock:
                         loggr.print("ACTIVATE 1", 0)
                         p.ChangeDutyCycle(MIN_PWM)
+                        time.sleep(PWMRET_WAIT)
+                        p.ChangeDutyCycle(NET_PWM)
+                        time.sleep(PWM_WAIT)
+                        p.ChangeDutyCycle(0)
                         is_shot[0] = 1
 
+                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
+                        hud = telemetry_data.get("VFR_HUD")
+                        
+                        if (gps and hud):
+                            loggr.print("ACTVPOS 1 -> " + str(gps.lat) + "," + str(gps.lon) + "," + str(hud.heading), 1)
+
                 elif (blst[0].value == 1):
-                    comm_lock1.acquire(blocking=False)
-                    comm_lock2.acquire(blocking=False)
+                    comm_event1.clear()
+                    comm_event2.clear()
+
+                    comm_event12.wait()
+                    comm_event22.wait()
                     
                     for x in range(ERROR_TRY_COUNT):
                         if (mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))):
                             break
                         else:
-                            print("FAIL ARM")
+                            loggr.print("FAIL ARM", 2)
 
-                    comm_lock1.release()
-                    comm_lock2.release()
+                    comm_event1.set()
+                    comm_event2.set()
 
                     loggr.print("ARM TOGGLE TO: " + str(mav_com.is_armed), 0)
 
@@ -641,43 +741,85 @@ def mainloop():
                     with firing_lock:
                         loggr.print("ACTIVATE 2", 0)
                         p.ChangeDutyCycle(MAX_PWM)
+                        time.sleep(PWMRET_WAIT)
+                        p.ChangeDutyCycle(NET_PWM)
+                        time.sleep(PWM_WAIT)
+                        p.ChangeDutyCycle(0)
                         is_shot[1] = 1
 
+                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
+                        hud = telemetry_data.get("VFR_HUD")
+                        
+                        if (gps and hud):
+                            loggr.print("ACTVPOS 2 -> " + str(gps.lat) + "," + str(gps.lon) + "," + str(hud.heading), 1)
+
                 elif (blst[0].value == 4):
-                    loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
+                    comm_event1.clear()
+                    comm_event2.clear()
+
+                    comm_event12.wait()
+                    comm_event22.wait()
+
                     mav_com.toggle_control(telemetry_data.get("HEARTBEAT"))
+                    loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
+
+                    comm_event1.set()
+                    comm_event2.set()
 
                 elif (blst[0].value == 5):
                     with firing_lock:
                         p.ChangeDutyCycle(NET_PWM)
+                        time.sleep(PWM_WAIT)
+                        p.ChangeDutyCycle(0)
                         loggr.print("DE-ACTIVATE", 0)
 
                 elif (blst[0].value == 8):
-                    comm_lock1.acquire(blocking=False)
-                    comm_lock2.acquire(blocking=False)
+                    comm_event1.clear()
+                    comm_event2.clear()
+
+                    comm_event12.wait()
+                    comm_event22.wait()
 
                     loggr.print("GET WAYPOINTS", 0)
                     
                     waypoints = mav_com.get_waypoints()
 
-                    comm_lock1.release()
-                    comm_lock2.release()
+                    comm_event1.set()
+                    comm_event2.set()
+
+                elif (blst[0].value == 11):
+                    comm_event1.clear()
+                    comm_event2.clear()
+
+                    comm_event12.wait()
+                    comm_event22.wait()
+
+                    loggr.print("PREFLIGHT", 0)
+                    
+                    for x in range(20):
+                        if mav_com.preflight():
+                            break
+
+                    comm_event1.set()
+                    comm_event2.set()
+
+                elif (blst[0].value == 12):
+                    comm_event1.clear()
+                    comm_event2.clear()
+
+                    comm_event12.wait()
+                    comm_event22.wait()
+
+                    loggr.print("ABORT LANDING", 0)
+                    
+                    for x in range(20):
+                        if (mav_com.abort_land()):
+                            break
+
+                    comm_event1.set()
+                    comm_event2.set()
 
                 blst.pop(0)
-
-            countmsg = gcs_data.get("MISSION_COUNT")
-            if (countmsg):
-                comm_lock2.acquire(blocking=False)
-                mav_com.write_pixhawk(countmsg[0].get_msgbuf()) 
-                countmsg.pop(0)
-                comm_lock2.release()
-
-            msnmsg = gcs_data.get("MISSION_ITEM_INT")
-            if (msnmsg):
-                comm_lock2.acquire(blocking=False)
-                mav_com.write_pixhawk(msnmsg[0].get_msgbuf()) 
-                msnmsg.pop(0)
-                comm_lock2.release()
 
             time.sleep(MAIN_WAIT)
 
@@ -755,7 +897,7 @@ try:
         
         
         loggr.print("Waiting for Pixhawk Hearbeat...", 3)
-        pixhawk.wait_heartbeat()
+        initial_heartbeat = pixhawk.wait_heartbeat()
         loggr.print("Success!\n", 1)
             
     
@@ -765,11 +907,11 @@ try:
         loggr.print("Success!\n", 1)
     
         loggr.print("Starting Camera Reader Class...", 3)
-        img_recv = RecvClass()
+        img_recv = RecvClass(IMG_FPS, IMG_WIDTH, IMG_HEIGHT)
         loggr.print("Success!\n", 1)
     
         loggr.print("Starting Image Sender Class...", 3)
-        img_send = SendClass(IP, 5000)
+        img_send = SendClass(IP, 5000, IMG_FPS, IMG_WIDTH, IMG_HEIGHT)
         loggr.print("Success!\n", 1)
         
     
@@ -787,6 +929,7 @@ try:
         ################## MAVLINK CLASS ##################
         loggr.print("Starting GCS Connection...", 3)
         mav_com = MavConnect(pixhawk)
+        mav_com.init(initial_heartbeat)
         loggr.print("Success!\n", 1)
         
         if (not PC_TEST):
@@ -811,8 +954,8 @@ try:
                     else:
                         loggr.print("Fail!\n", 2)
                         img_recv.close()
-                except:
-                    loggr.print("Fail!\n", 2)
+                except Exception as e:
+                    loggr.print("Fail!\n" + str(e), 2)
                     img_recv.close()
         
         
@@ -826,8 +969,8 @@ try:
                     else:
                         loggr.print("Fail!\n", 2)
                         img_send.close()
-                except:
-                    loggr.print("Fail!\n", 2)
+                except Exception as e:
+                    loggr.print("Fail!\n" + str(e), 2)
                     img_send.close()
         
     
@@ -856,7 +999,7 @@ try:
             for x in range(ERROR_TRY_COUNT):
                 try:
                     loggr.print("Starting Servo GPIO... [{}]".format((ERROR_TRY_COUNT-x)), 3)
-                    p.start(NET_PWM)
+                    p.start(0)
                     loggr.print("Success!\n", 1)
                     break
                 except:
@@ -894,7 +1037,7 @@ try:
         video = None
         if (IMG_TEST):
             loggr.print("Starting with Local Image Save...", 3)
-            video = VideoSave()           
+            video = VideoSave(IMG_FPS, IMG_WIDTH, IMG_HEIGHT)           
         read_send_img()
 
 except KeyboardInterrupt:
