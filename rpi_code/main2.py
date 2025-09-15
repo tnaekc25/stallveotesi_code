@@ -1,0 +1,1031 @@
+from pymavlink import mavutil
+import time, select, numpy as np, sys, psutil
+from threading import Thread, Event, Lock
+from queue import Queue
+from com.mav import MavConnect
+from com.imgm import RecvClass, SendClass, DetectClass, VideoSave
+
+from sim.simulation import RocketSimulation
+from sim.rocket import RocketModel
+from sim.envr import EnvironmentModel
+
+from util.log import Log
+from util.telem_log import TelemLog
+from const import *
+
+if (not PC_TEST):
+    import RPi.GPIO as GPIO
+
+
+
+
+waypoints = []
+
+#############################
+
+stop_event = Event()
+
+#############################
+
+telemetry_data = {}
+gcs_data = {}
+box_data = []
+
+frame_queue = Queue(maxsize=1)
+
+is_det = False
+
+loggr = Log()
+
+read_check = [0, 0, 0, 0]
+write_check = [0, 0, 0]
+
+signal_lost = False
+lost_start = -1
+
+#############################
+
+firing_lock = Lock()
+frame_lock = Lock()
+
+comm_event1 = Event()
+comm_event12 = Event()
+comm_event2 = Event()
+comm_event22 = Event()
+
+comm_event1.set()
+comm_event2.set()
+
+
+detection_count = [0, 0]
+last_detect = [-1, -1]
+shoot_pos = [None, None]
+pos_diff = [None, None]
+is_shot = [0, 0]
+
+headed = [False, False]
+should_head = [False, False]
+
+head_time = [-1, -1]
+
+bcnt = 0
+rcnt = 0
+fps_counter = 0
+
+#############################
+
+
+
+def distn(lat1, lon1, lat2, lon2):
+    R = 6371000
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    return R * c
+
+
+
+
+
+
+
+def direct_fire():
+    global box_data, telemetry_data, detection_count, last_detect, is_shot, frame_queue, frame_lock, rcnt, bcnt, fps_counter
+
+    while (not stop_event.is_set()):
+        try:
+            img_feed = None
+
+            if not frame_queue.empty():
+                with frame_lock:
+                    img_feed = frame_queue.get().copy()
+
+            if (is_det and img_feed is not None and (False in is_shot)):
+                box_data = img_det.get_boxes(img_feed, DET_CONF)
+                fps_counter += 1
+
+                if (IMG_TEST == 2):
+                    drawn = video.draw(img_feed, box_data)
+                    if (video):
+                        video.out.write(drawn)
+                    img_send.send(drawn)
+
+                for box in box_data:
+                    clss = 1 if box[0] else 0
+
+                    bcnt += clss
+                    rcnt += not clss
+
+                    if (is_shot[clss] or not (clss or is_shot[1])):
+                        continue
+                
+                    if last_detect[clss] >= 0 and (time.time() - last_detect[clss]) > DETECTION_TIMEOUT:
+                        detection_count[clss] = 0
+                
+                    if detection_count[clss] < REQUIRED_DETECTION_COUNT:
+                        detection_count[clss] += 1
+                        last_detect[clss] = time.time()
+
+                    # CHECK TO FIRE
+                    if detection_count[clss] >= REQUIRED_DETECTION_COUNT:
+                        cen = (box[1] + box[3]) / 2
+
+                        print(cen)
+                        if cen > UPPER_DET_LIM or cen < LOWER_DET_LIM:
+                            continue
+
+                        p.ChangeDutyCycle(MIN_PWM if clss else MAX_PWM)
+                        time.sleep(PWMRET_WAIT)
+                        p.ChangeDutyCycle(NET_PWM)
+
+                        p.ChangeDutyCycle(0)
+                        for x in range(3):
+                            loggr.print(">>> DIRECT SHOOT", 1)
+                        is_shot[clss] = 1
+
+            elif (img_feed is not None):
+                if (IMG_TEST == 2):
+                    drawn = video.draw(img_feed, box_data)
+                    if (video):
+                        video.out.write(drawn)
+                    img_send.send(drawn)
+
+                time.sleep(IMG_WAIT)
+
+            time.sleep(DET_WAIT)
+        
+        except Exception as e:
+            loggr.print("ERROR AT THREAD 0 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
+
+
+
+## APPLY OBJECT DETECTION AND RUN SIMULATION AND FIRE
+def detect_and_fire():
+
+    global box_data, telemetry_data, detection_count, last_detect, projected_hit, frame_lock
+    global pos_diff, headed, head_time, is_shot, shoot_pos, should_head, frame_queue, firing_lock
+
+    if (PC_TEST):
+        shoot_pos[0] = (39.8831412, 32.7792335, 39.8837422, 32.7785039, time.time())
+
+    while (not stop_event.is_set()):
+        try:
+            # CHECK TO GUIDE TO TARGET
+            for clss in range(1, -1, -1):
+                if (shoot_pos[clss] and not headed[clss]):
+
+                    if (not clss and (not is_shot[1] and not should_head[1])):
+                        continue
+
+                    if (time.time()-shoot_pos[clss][4] > SHOOT_COOLDOWN):
+                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
+            
+                        if (gps):
+                            lat = gps.lat / 1e7
+                            lon = gps.lon / 1e7
+            
+                            tolat = shoot_pos[clss][0]
+                            tolon = shoot_pos[clss][1]
+            
+                            pos_diff[clss] = (abs(lat - shoot_pos[clss][2]), abs(lon - shoot_pos[clss][3]),
+                             distn(lat, lon, shoot_pos[clss][2], shoot_pos[clss][3]))
+                
+                            if (pos_diff[clss][2] < AUTO_HEAD_DIST):
+                                should_head[clss] = True
+
+                # GUIDE TO TARGET
+                if ((True not in headed)):
+                    if (should_head[clss]):
+                        comm_event1.clear()
+                        comm_event2.clear()
+    
+                        comm_event12.wait()
+                        comm_event22.wait()
+
+                        for x in range(20):
+                            if (not mav_com.go_waypoint(tolat, tolon, lat, lon, HIT_ALTITUDE,
+                                HIT_AIRSPEED, loggr)):
+                                loggr.print("FAIL AT REPOSITION", 2)
+                                continue
+
+                            headed[clss] = True
+                            should_head[clss] = False
+                            head_time[clss] = time.time()
+                            break
+
+                        comm_event1.set()
+                        comm_event2.set()
+
+                # IF HEADED, SHOOT and RETURN
+                elif (headed[clss]):
+                    gps = telemetry_data.get("GLOBAL_POSITION_INT")
+            
+                    if (gps):
+                        lat = gps.lat / 1e7
+                        lon = gps.lon / 1e7
+        
+                        tolat = shoot_pos[clss][0]
+                        tolon = shoot_pos[clss][1]
+        
+                        pos_diff[clss] = (abs(lat - shoot_pos[clss][2]), abs(lon - shoot_pos[clss][3]),
+                         distn(lat, lon, shoot_pos[clss][2], shoot_pos[clss][3]))
+            
+                        if (pos_diff[clss][2] < AUTO_SHOOT_DIST):
+                            loggr.print("TARGET REACHED - SHOOT", 1)
+        
+                            with firing_lock:
+                                headed[clss] = False
+                                shoot_pos[clss] = None
+    
+                                p.ChangeDutyCycle(MIN_PWM if clss else MAX_PWM)
+                                time.sleep(PWM_WAIT)
+                                p.ChangeDutyCycle(0)
+    
+                                is_shot[clss] = 1
+        
+                            for x in range(20):  
+                                if (mav_com.return_auto()):
+                                    break
+
+            if (True in headed):
+                time.sleep(HEAD_WAIT)
+                continue
+
+            img_feed = None
+            if not frame_queue.empty():
+                with frame_lock:
+                    img_feed = frame_queue.get().copy()
+
+            if (is_det and (img_feed) is not None and (False in is_shot)):
+                box_data = img_det.get_boxes(img_feed, DET_CONF)
+
+                for box in box_data:
+                    clss = 1 if box[0] else 0
+
+                    if (is_shot[clss]):
+                        continue
+                
+                    if last_detect[clss] >= 0 and (time.time() - last_detect[clss]) > DETECTION_TIMEOUT:
+                        detection_count[clss] = 0
+                
+                    if detection_count[clss] < REQUIRED_DETECTION_COUNT:
+                        detection_count[clss] += 1
+                        last_detect[clss] = time.time()
+                    
+
+                    # FIND THE TARGET's POSITION
+                    if detection_count[clss] == REQUIRED_DETECTION_COUNT:
+                        hud = telemetry_data.get("VFR_HUD")
+                        attd = telemetry_data.get("ATTITUDE")
+                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
+                        
+                        if (hud and attd and gps):
+                            detection_count[clss] += 1
+                            last_detect[clss] = -1
+
+                            cralt = gps.relative_alt / 1000
+
+                            try:
+                                detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
+                                (box[2] + box[4]) / 2, attd.roll, attd.pitch, cralt)
+                            except ValueError as e:
+                                continue
+
+                            lat, lon = img_det.pos_to_gps(gps, hud, detx, dety)
+                            shoot_pos[clss] = (lat, lon, gps.lat / 1e7, gps.lon / 1e7, time.time())
+
+            time.sleep(DET_WAIT)
+        
+        except Exception as e:
+            loggr.print("ERROR AT THREAD 0 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
+
+
+## READ AND SEND IMG
+def read_send_img():
+
+    global frame_queue, video, img_recv, img_send
+
+    while (not stop_event.is_set()):
+        try:
+
+            if (img_recv.is_open and img_send.is_open):
+                img_feed = img_recv.recv()
+                
+                if (img_feed is not None):
+                    try:
+                        frame_queue.put_nowait(img_feed)
+                    except:
+                        if not frame_queue.empty():
+                            with frame_lock:
+                                frame_queue.get_nowait()
+                                frame_queue.put_nowait(img_feed)
+
+                    if (IMG_TEST == 1):
+                        if (video):
+                            video.out.write(img_feed)
+                        img_send.send(img_feed)
+                        
+                
+                read_check[3] += 1
+
+            time.sleep(IMG_WAIT)
+
+        except Exception as e:
+            loggr.print("ERROR AT THREAD 1 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
+
+
+
+## READ TELEMETRY FROM PIXHAWK AND DATA FROM GCS
+def read_data():
+    global telemetry_data, lost_start
+
+    while (not stop_event.is_set()):
+        try:
+            comm_event2.wait()
+            comm_event22.clear()
+
+            inputs = []
+
+            try:
+                if (mav_com.sock):
+                    if (mav_com.sock.fileno() >= 0):
+                        inputs.append(mav_com.sock)
+            except:
+                loggr.print("socket error before select", 2)
+
+
+            try:
+                if (mav_com.pixhawk):
+                    fd = mav_com.pixhawk.fd
+                    if (fd is not None and fd >= 0):
+                        inputs.append(fd)
+            except:
+                loggr.print("mavlink error before select 1", 2)
+
+
+            try:
+                if (mav_com.gcs_in):
+                    fd = mav_com.gcs_in.fd
+                    if (fd is not None and fd >= 0):
+                        inputs.append(fd)
+            except:
+                loggr.print("mavlink error before select 2", 2)
+
+
+            if (not inputs):
+                time.sleep(RECV_WAIT)
+                continue
+
+
+            readable, _, _ = select.select(
+                inputs,
+                [], [], 0.01)
+            
+            if (mav_com.pixhawk and mav_com.pixhawk.fd in readable and mav_com.mav_connected):
+                msg = mav_com.read_pixhawk()        
+                if (msg):         
+                    
+                    if (USE_GCS_MSN):
+                        if (msg.get_type() == "MISSION_REQUEST"):    
+                            mav_com.send_gcs(msg)
+                        else:
+                            telemetry_data[msg.get_type()] = msg
+                    else:
+                        telemetry_data[msg.get_type()] = msg               
+                    
+                    mav_com.send_planner(msg.get_msgbuf())
+                    write_check[1] += 1
+                    read_check[0] += 1
+
+            if (mav_com.sock in readable and mav_com.sock_connected):
+                planner_data = mav_com.read_planner()
+                if (planner_data):
+                    mav_com.write_pixhawk(planner_data) 
+                    write_check[0] += 1
+                    read_check[1] += 1
+
+            if (mav_com.gcs_in and mav_com.gcs_in.fd in readable and mav_com.mav_connected):
+                msg = mav_com.get_gcs()
+                if (msg):
+                    if msg.get_type() == ("MISSION_COUNT"):
+                        mav_com.write_pixhawk(msg.get_msgbuf())
+                    elif msg.get_type() == "MISSION_ITEM_INT":
+                        mav_com.write_pixhawk(msg.get_msgbuf())
+                    if (gcs_data.get(msg.get_type()) == None):
+                        gcs_data[msg.get_type()] = [msg]
+                    else:
+                        gcs_data[msg.get_type()].append(msg)
+
+                    read_check[2] += 1
+
+            comm_event22.set()
+            time.sleep(RECV_WAIT)
+        
+        except Exception as e:
+            loggr.print("ERROR AT THREAD 2 " + str(e), 2)
+            mav_com.close_sock()
+            mav_com.close_gcs()
+
+            try:
+                time.sleep(ERROR_WAIT)
+                mav_com.connect_gcs(IP, *(PORTS[0:2]))
+                mav_com.connect_sock(MSIP, PORTS[2])        
+            except Exception as e2:
+                loggr.print("ERROR AT THREAD 2 - 2 " + str(e2), 2)
+
+
+
+# SEND DATA TO GCS AND MISSION PLANNER
+def send_data():
+
+    global telemetry_data, detection_count, is_det, waypoints, box_data
+
+    while (not stop_event.is_set()):
+        try:
+
+            comm_event1.wait()
+            comm_event12.clear()
+
+            mav_com.send_heartbeat()
+            mav_com.is_armed = mav_com.check_armed(telemetry_data.get("HEARTBEAT"))
+            mav_com.control_mode = mav_com.get_mode(telemetry_data.get("HEARTBEAT"))
+            mav_com.control_mode = mav_com.control_mode if mav_com.control_mode else 0
+
+            for _, msg in list(telemetry_data.items()):
+                    if (msg and not msg.get_type().startswith("UNKNOWN_")):
+                        mav_com.send_gcs(msg)
+                        write_check[2] += 1
+
+            # SEND INFO
+            mav_com.gcs_out.mav.statustext_send(
+                severity=6,
+                text=("STATINF"
+                + ('1' if mav_com.is_armed else '0') + ','
+                + (str(mav_com.control_mode)) + ','
+                + ('1' if detection_count[0] >= 0 else '0') + ','
+                + ('1' if detection_count[1] >= 0 else '0') + ','
+                + ('1' if is_det else '0') + ','
+                ).encode('utf-8')
+            )
+
+            # SEND BOXES
+            for box in box_data:
+                mav_com.send_box(box)
+            # SEND WAYPOINTS
+            for wp in waypoints:
+                mav_com.send_wp(wp)
+            if (waypoints):
+                waypoints = []
+
+            comm_event12.set()
+            time.sleep(SEND_WAIT)
+
+        except Exception as e:
+            loggr.print("ERROR AT THREAD 3 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
+
+
+
+
+def log():
+
+    global read_check, write_check, box_data, fps_counter
+
+    while (not stop_event.is_set()):
+
+        if (signal_lost):
+            loggr.print("RC SIGNAL LOST!", 2)
+        else:
+            loggr.print("READ STATUS: ", 3, "")
+            loggr.raw_print("|", 0, "")
+            loggr.raw_print(f" PXHWK:{read_check[0]}/{write_check[0]} ",
+                1 if (read_check[0] or write_check[0]) else 2, "")
+            loggr.raw_print("|", 0, "")
+            loggr.raw_print(f" PLNR:{read_check[1]}/{write_check[1]} ",
+                1 if (read_check[1] or write_check[1]) else 2, "")
+            loggr.raw_print("|", 0, "")
+            loggr.raw_print(f" GCS:{read_check[2]}/{write_check[2]} " ,
+                1 if (read_check[2] or write_check[2]) else 2, "")
+            loggr.raw_print("|", 0, "")
+            loggr.raw_print(f" CAM:{read_check[3]} ",
+                1 if (read_check[3]) else 2, "")
+            loggr.raw_print("|", 0, "")
+            loggr.raw_print(f" DETECT: {len(box_data)} ",
+                1 if len(box_data) else 2, "")
+            loggr.raw_print("|", 0 , "") 
+
+            if telemetry_data.get("RC_CHANNELS"):
+                loggr.raw_print(f" ({telemetry_data.get('RC_CHANNELS').rssi}) ", 3, "")
+            else:
+                loggr.raw_print(f" ({-1}) ", 3, "")
+
+            loggr.raw_print("|", 0)
+
+            loggr.raw_print(f">>> DISTANCE TO REPOSITION: ", 3, "")
+
+            if (shoot_pos[0] and pos_diff[0]):
+                if (not headed[0]):
+                    loggr.raw_print(str(round(pos_diff[0][0], 4)) + "deg , " + str(round(pos_diff[0][1], 4)) + "deg = " +
+                        str(round(pos_diff[0][2], 4)) + "m", 0, "")
+                else:
+                    loggr.raw_print(f"HEADED {round(time.time()-head_time[0], 2)} s ago", 3, "")
+            else:
+                loggr.raw_print("NONE", 2, "")
+            
+            loggr.raw_print(" - ", 0 , "") 
+
+
+            if (is_det):
+                loggr.raw_print(f"TOTAL RED: {rcnt} | TOTAL BLUE: {bcnt} | FPS: {fps_counter}", 1, "")
+                fps_counter = 0
+            else:
+                loggr.raw_print("DETECTION OFF", 2, "")
+
+            loggr.raw_print(" | ", 0, "")
+
+
+            """if (shoot_pos[1] and pos_diff[1]):
+                if (not headed[0]):
+                    loggr.raw_print(str(round(pos_diff[1][0], 4)) + "deg ," + str(round(pos_diff[1][1], 4)) + "deg = " +
+                        str(round(pos_diff[1][2], 4)) + "m", 1, "")
+                else:
+                    loggr.raw_print(f"HEADED {time.time()-head_time[1]} s ago", 1, "")
+            else:
+                loggr.raw_print("NONE", 2, "")
+
+            loggr.raw_print(" | ", 0, "")"""
+
+            """if (projected_hit):
+                loggr.raw_print(f"{projected_hit[4]} - hit: {projected_hit[0]} {projected_hit[1]}" +
+                    f", target: {projected_hit[2]} {projected_hit[3]}", 1, "")
+            else:
+                loggr.raw_print("NO HIT PROJECTION", 2, "")"""
+
+            loggr.raw_print(" |", 0)
+
+            temp = psutil.sensors_temperatures().get('cpu_thermal', [{}])[0].current
+            cpu = psutil.cpu_percent()
+            mem = psutil.virtual_memory().percent
+            loggr.raw_print("temp:" + str(temp) + " | cpu:" + str(cpu) + " | mem:" + str(mem), 3, "")
+            loggr.raw_print(" |", 0) 
+
+
+            if (1):
+                attd = telemetry_data.get("ATTITUDE")
+                gps = telemetry_data.get("GLOBAL_POSITION_INT")
+
+                if (attd and gps):
+                    
+                    cralt = gps.relative_alt / 1000
+
+                    try:
+                        detx, dety = img_det.get_distance(320,
+                            240, attd.roll, attd.pitch, cralt)
+                        loggr.raw_print(f"{detx} {dety}", 1)
+                    except:
+                        pass
+
+            loggr.raw_print(" |", 0, "\n\n") 
+
+
+        read_check = [0, 0, 0, 0]
+        write_check = [0, 0, 0]
+
+        time.sleep(LOG_WAIT)
+
+
+# PROCESS DATA
+def mainloop():
+
+    global gcs_data, is_det, telemetry_data, signal_lost, lost_start, waypoints
+
+    last_channel = -1
+    last_rc = -1
+    new_channel = -1
+
+    failsafed = False
+
+    while (not stop_event.is_set()):
+        try:
+            # FAILSAFE
+            if (FAILSAFE_ACTIVE):
+                if (telemetry_data.get("HEARTBEAT") and telemetry_data.get("HEARTBEAT").system_status == 5
+                 and not failsafed and not signal_lost):
+                    last_rc = time.time()
+                    signal_lost = True
+
+                if (last_rc > 0 and time.time()-last_rc > FAILSAFE_DELAY):
+                    failsafed = True
+                    mav_com.send_fail()
+                    loggr.print(" >>> FAIL SAFE <<< ", 2)
+
+                """rc = (telemetry_data.get("RC_CHANNELS"))
+                if (rc):
+                    new_channel = rc.chan15_raw
+
+                if (new_channel != last_channel or last_channel < 0):
+                    last_rc = time.time()
+                    last_channel = new_channel
+                    signal_lost = False
+
+                if (last_rc > 0 and time.time()-last_rc > FAILSAFE_DELAY):
+                    signal_lost = True
+                    mav_com.send_fail()
+                    loggr.print(" >>> FAIL SAFE <<< ", 2) """          
+
+
+            # PROCESS GCS DATA
+            blst = gcs_data.get("NAMED_VALUE_INT")
+            if (blst):
+                if (blst[0].value == 0):
+                    with firing_lock:
+                        loggr.print("ACTIVATE 1", 0)
+                        p.ChangeDutyCycle(MIN_PWM)
+                        time.sleep(PWMRET_WAIT)
+                        p.ChangeDutyCycle(NET_PWM)
+                        time.sleep(PWM_WAIT)
+                        p.ChangeDutyCycle(0)
+                        is_shot[0] = 1
+
+                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
+                        hud = telemetry_data.get("VFR_HUD")
+                        
+                        if (gps and hud):
+                            loggr.print("ACTVPOS 1 -> " + str(gps.lat) + "," + str(gps.lon) + "," + str(hud.heading), 1)
+
+                elif (blst[0].value == 1):
+                    comm_event1.clear()
+                    comm_event2.clear()
+
+                    comm_event12.wait()
+                    comm_event22.wait()
+                    
+                    for x in range(ERROR_TRY_COUNT):
+                        if (mav_com.toggle_arm(telemetry_data.get("HEARTBEAT"))):
+                            break
+                        else:
+                            loggr.print("FAIL ARM", 2)
+
+                    comm_event1.set()
+                    comm_event2.set()
+
+                    loggr.print("ARM TOGGLE TO: " + str(mav_com.is_armed), 0)
+
+                elif (blst[0].value == 2):
+                    is_det = False if is_det else True
+                    loggr.print("TOGGLE DETECTION TO: " + str(is_det), 0)
+
+                elif (blst[0].value == 3):
+                    with firing_lock:
+                        loggr.print("ACTIVATE 2", 0)
+                        p.ChangeDutyCycle(MAX_PWM)
+                        time.sleep(PWMRET_WAIT)
+                        p.ChangeDutyCycle(NET_PWM)
+                        time.sleep(PWM_WAIT)
+                        p.ChangeDutyCycle(0)
+                        is_shot[1] = 1
+
+                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
+                        hud = telemetry_data.get("VFR_HUD")
+                        
+                        if (gps and hud):
+                            loggr.print("ACTVPOS 2 -> " + str(gps.lat) + "," + str(gps.lon) + "," + str(hud.heading), 1)
+
+                elif (blst[0].value == 4):
+                    comm_event1.clear()
+                    comm_event2.clear()
+
+                    comm_event12.wait()
+                    comm_event22.wait()
+
+                    mav_com.toggle_control(telemetry_data.get("HEARTBEAT"))
+                    loggr.print("TOGGLE CONTROL TO:" + str(mav_com.control_mode), 0)
+
+                    comm_event1.set()
+                    comm_event2.set()
+
+                elif (blst[0].value == 5):
+                    with firing_lock:
+                        p.ChangeDutyCycle(NET_PWM)
+                        time.sleep(PWM_WAIT)
+                        p.ChangeDutyCycle(0)
+                        loggr.print("DE-ACTIVATE", 0)
+
+                elif (blst[0].value == 8):
+                    comm_event1.clear()
+                    comm_event2.clear()
+
+                    comm_event12.wait()
+                    comm_event22.wait()
+
+                    loggr.print("GET WAYPOINTS", 0)
+                    
+                    waypoints = mav_com.get_waypoints()
+
+                    comm_event1.set()
+                    comm_event2.set()
+
+                elif (blst[0].value == 11):
+                    comm_event1.clear()
+                    comm_event2.clear()
+
+                    comm_event12.wait()
+                    comm_event22.wait()
+
+                    loggr.print("PREFLIGHT", 0)
+                    
+                    for x in range(20):
+                        if mav_com.preflight():
+                            break
+
+                    comm_event1.set()
+                    comm_event2.set()
+
+                elif (blst[0].value == 12):
+                    comm_event1.clear()
+                    comm_event2.clear()
+
+                    comm_event12.wait()
+                    comm_event22.wait()
+
+                    loggr.print("ABORT LANDING", 0)
+                    
+                    for x in range(20):
+                        if (mav_com.abort_land()):
+                            break
+
+                    comm_event1.set()
+                    comm_event2.set()
+
+                elif (blst[0].value == 13):
+                    last_rc = -1
+                    failsafed = False
+                    signal_lost = False
+
+                blst.pop(0)
+
+            time.sleep(MAIN_WAIT)
+
+        except Exception as e:
+            loggr.print("ERROR AT THREAD 4 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
+
+
+
+def write_telem():
+
+    global telemetry_data, telem_logger
+
+    telem_logger.set_start()
+
+    while (not stop_event.is_set()):
+        try:
+            telem_logger.write(telemetry_data)
+            time.sleep(0.1)
+
+        except Exception as e:
+            loggr.print("ERROR AT WRITE 1 " + str(e), 2)
+            time.sleep(ERROR_WAIT)
+
+
+
+try:
+    if __name__ == "__main__":
+    
+
+        main_thread = None
+        telemlog_thread = None
+        detect_thread = None
+        send_thread = None
+        recv_thread = None
+        log_thread = None
+
+        pixhawk = None
+        mav_com = None
+        img_recv = None
+        img_send = None
+        p = None
+
+
+        #CHECK ARGUMENTS
+    
+        if len(sys.argv) == 2:
+            MSIP = IP = sys.argv[1]
+    
+        if len(sys.argv) > 2:
+            IP = sys.argv[1]
+            MSIP = sys.argv[2]
+    
+        if len(sys.argv) > 3:
+            TELEM_TEST = int(sys.argv[3])
+    
+        if len(sys.argv) > 4:
+            IMG_TEST = int(sys.argv[4])
+    
+    
+        #>>># START PROCESS
+    
+        loggr.print(f"Process Starting on GCS: {IP} - MSIP : {MSIP}...", 3, "\n\n")
+    
+    
+        ################## START CRITICAL COMPONENTS ##################
+    
+        ################## START PIXHAWK CONNECTION ##################
+        loggr.print("Starting Pixhawk Connection...", 3)
+        if (PC_TEST):
+            pixhawk = mavutil.mavlink_connection('udp:0.0.0.0:31315')
+        else:
+            pixhawk = mavutil.mavlink_connection('/dev/ttyAMA0', baud=57600)
+        loggr.print("Success!\n", 1)
+        
+        
+        loggr.print("Waiting for Pixhawk Hearbeat...", 3)
+        initial_heartbeat = pixhawk.wait_heartbeat()
+        loggr.print("Success!\n", 1)
+            
+    
+        ################## IMAGE CLASSES ##################
+        loggr.print("Starting Detection Model...", 3)
+        img_det = DetectClass("yeni.tflite", 663, 663, 320, 240, -np.pi / 6)
+        loggr.print("Success!\n", 1)
+    
+        loggr.print("Starting Camera Reader Class...", 3)
+        img_recv = RecvClass(IMG_FPS, IMG_WIDTH, IMG_HEIGHT)
+        loggr.print("Success!\n", 1)
+    
+        loggr.print("Starting Image Sender Class...", 3)
+        img_send = SendClass(IP, 5000, IMG_FPS, IMG_WIDTH, IMG_HEIGHT)
+        loggr.print("Success!\n", 1)
+        
+    
+        ################## SIMULATION MODEL ##################
+        loggr.print("Starting Simulation Model...", 3)
+        #m/s^2, kg/m^3 -> by meter
+        envr = EnvironmentModel(grav = 9.81, ro_path = "", wind_path = "") 
+        #kg, kg.m^2, m, m^2, coef of drag -> by velocity
+        rocket = RocketModel(mass = 241, carea = 0.06, cd_path = "") 
+        sim = RocketSimulation(dt = 0.1, rocket = rocket, envr = envr)
+        loggr.print("Success!\n", 1)
+        
+    
+    
+        ################## MAVLINK CLASS ##################
+        loggr.print("Starting GCS Connection...", 3)
+        mav_com = MavConnect(pixhawk)
+        mav_com.init(initial_heartbeat)
+        loggr.print("Success!\n", 1)
+        
+        if (not PC_TEST):
+            ################## START GPIO ##################
+            loggr.print("Starting GPIO...", 3)
+            GPIO.setmode(GPIO.BOARD)
+            GPIO.setup(SERVO_PIN, GPIO.OUT)
+            p = GPIO.PWM(SERVO_PIN, 50)
+            loggr.print("Success!\n", 1)
+    
+    
+        ####################################################
+        
+        if (not PC_TEST):
+            for x in range(ERROR_TRY_COUNT):
+                try:
+                    loggr.print("Opening Camera Stream... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+        
+                    if (img_recv.start()):
+                        loggr.print("Success!\n", 1)
+                        break
+                    else:
+                        loggr.print("Fail!\n", 2)
+                        img_recv.close()
+                except Exception as e:
+                    loggr.print("Fail!\n" + str(e), 2)
+                    img_recv.close()
+        
+        
+            for x in range(ERROR_TRY_COUNT):
+                try:
+                    loggr.print("Starting Gstreamer... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+        
+                    if (img_send.start()):
+                        loggr.print("Success!\n", 1)
+                        break
+                    else:
+                        loggr.print("Fail!\n", 2)
+                        img_send.close()
+                except Exception as e:
+                    loggr.print("Fail!\n" + str(e), 2)
+                    img_send.close()
+        
+    
+        for x in range(ERROR_TRY_COUNT):
+            try:
+                loggr.print("Connecting GCS... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+                mav_com.connect_gcs(IP, *(PORTS[0:2]))
+                loggr.print("Success!\n", 1)
+                break
+            except:
+                loggr.print("Fail!\n", 2)
+                mav_com.close_gcs()
+    
+    
+        for x in range(ERROR_TRY_COUNT):
+            try:
+                loggr.print("Connecting Mission Planner... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+                mav_com.connect_sock(MSIP, PORTS[2])
+                loggr.print("Success!\n", 1)
+                break
+            except:
+                loggr.print("Fail!\n", 2)
+                mav_com.close_sock()
+    
+        if (not PC_TEST):
+            for x in range(ERROR_TRY_COUNT):
+                try:
+                    loggr.print("Starting Servo GPIO... [{}]".format((ERROR_TRY_COUNT-x)), 3)
+                    p.start(0)
+                    loggr.print("Success!\n", 1)
+                    break
+                except:
+                    loggr.print("Fail!\n", 2)
+
+
+        if (TELEM_TEST):
+            loggr.print("Starting with Local Telemetry Logging...", 3)
+            telem_logger = TelemLog("telem_log.txt")
+            telemlog_thread = Thread(target=write_telem, daemon=False)
+            telemlog_thread.start()
+        
+        if SIMPLE_FIRE:
+            detect_thread = Thread(target=direct_fire, daemon=False)
+            detect_thread.start()
+        else:
+            detect_thread = Thread(target=detect_and_fire, daemon=False)
+            detect_thread.start()
+    
+        send_thread = Thread(target=send_data, daemon=False)
+        send_thread.start()
+        
+        recv_thread = Thread(target=read_data, daemon=False)
+        recv_thread.start()
+
+        log_thread = Thread(target=log, daemon=False)
+        log_thread.start()
+        
+        main_thread = Thread(target=mainloop, daemon=False)
+        main_thread.start()
+
+        video = None
+        if (IMG_TEST):
+            loggr.print("Starting with Local Image Save...", 3)
+            video = VideoSave(IMG_FPS if IMG_TEST == 1 else IMG_FPS / 4 if IMG_TEST == 2 else 0, IMG_WIDTH, IMG_HEIGHT)           
+        read_send_img()
+
+except KeyboardInterrupt:
+    pass
+
+finally:
+    #|||# HALT PROCESS
+
+    loggr.print("HALTING...", 3)
+
+    stop_event.set()
+
+    if (main_thread):
+        main_thread.join()
+    if (telemlog_thread):
+        telemlog_thread.join()
+    if (detect_thread):
+        detect_thread.join()
+    if (send_thread):
+        send_thread.join()
+    if (recv_thread):
+        recv_thread.join()
+    if (log_thread):
+        log_thread.join()
+
+    if (mav_com):
+        mav_com.close_sock()
+        mav_com.close_gcs()
+
+    if (img_recv):
+        img_recv.close()
+
+    if (img_send):
+        img_send.close()
+
+    if (pixhawk):
+        pixhawk.close()
+
+    if (p):
+        p.stop()
+        p = None
+    
+    if (not PC_TEST):
+        GPIO.cleanup()
+
+    loggr.print("HALTED", 1)

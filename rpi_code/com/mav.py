@@ -227,9 +227,8 @@ class MavConnect:
     
 
 
-    def go_waypoint(self, lat, lon, alt, speed, head, lat0, lon0, loggr):
+    def go_waypoint(self, lat, lon, lat0, lon0, alt, speed, loggr):
         self.pixhawk.set_mode_apm("GUIDED")
-    
         ack = self.pixhawk.recv_match(type='COMMAND_ACK', blocking=True, timeout=5)
         if ack and ack.command == mavutil.mavlink.MAV_CMD_DO_SET_MODE:
             if ack.result != mavutil.mavlink.MAV_RESULT_ACCEPTED:
@@ -244,44 +243,45 @@ class MavConnect:
             0,
             1, 0, 0, 0, 0, 0, 0
         )
-    
         ack = self.pixhawk.recv_match(type='COMMAND_ACK', blocking=True, timeout=5)
-        if ack and ack.command == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
-            if ack.result != mavutil.mavlink.MAV_RESULT_ACCEPTED:
-                return False
-        else:
+        if not (ack and ack.result == mavutil.mavlink.MAV_RESULT_ACCEPTED):
             return False
     
         loggr.print("MODE IS GUIDED", 1)
-    
-        time.sleep(2)
-    
-        R = 6371000
-        dlat = np.radians(lat - lat0)
-        dlon = np.radians(lon - lon0)
-        x = dlon * np.cos(np.radians((lat0 + lat) / 2)) * R
-        y = dlat * R
-        dist = np.sqrt(x**2 + y**2)
-        if dist == 0: dist = 0.001
-        vx = speed * x / dist
-        vy = speed * y / dist
-        vz = 0
+        time.sleep(1)
     
         self.pixhawk.mav.set_position_target_global_int_send(
             0,
             self.pixhawk.target_system,
             self.pixhawk.target_component,
             mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,
-            0b0000111111000111,
-            int(lat*1e7),
-            int(lon*1e7),
+            0b0000111111111000,
+            int(lat * 1e7),
+            int(lon * 1e7),
             alt,
-            vx, vy, vz,
             0, 0, 0,
-            head, 0
+            0, 0, 0,
+            0, 0
         )
+        ack = self.pixhawk.recv_match(type='COMMAND_ACK', blocking=True, timeout=5)
+        if not (ack and ack.result == mavutil.mavlink.MAV_RESULT_ACCEPTED):
+            return False
+    
+        self.pixhawk.mav.command_long_send(
+            self.pixhawk.target_system,
+            self.pixhawk.target_component,
+            mavutil.mavlink.MAV_CMD_DO_CHANGE_SPEED,
+            0,
+            1,
+            speed,
+            -1,
+            0, 0, 0, 0
+        )
+        ack = self.pixhawk.recv_match(type='COMMAND_ACK', blocking=True, timeout=5)
+        if not (ack and ack.result == mavutil.mavlink.MAV_RESULT_ACCEPTED):
+            return False
+    
         loggr.print("TARGET SENT", 1)
-
         return True
 
 

@@ -19,7 +19,7 @@ from cscom import MavCom, ImageCom
 os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0' 
 
 upimg = None
-IP = "10.176.102.118" 
+IP = "192.168.0.102" 
 PORT1 = 14550 
 PORT2 = 14551
 
@@ -210,6 +210,11 @@ class BottomWidget(ImageWidget):
         self.bt30.setFactors(0.026, 0.045, 0.12, 0.8)
         self.bt30.clicked.connect(lambda : com.send_button(12))
         self.children.append(self.bt30)
+
+        self.bt31 = StyledButton2(self, "ESF", self)
+        self.bt31.setFactors(0.026, 0.045, 0.20, 0.8)
+        self.bt31.clicked.connect(lambda : com.send_button(13))
+        self.children.append(self.bt31)
 
 
         self.waypoints = {}

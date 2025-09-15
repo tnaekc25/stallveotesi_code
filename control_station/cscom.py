@@ -98,8 +98,8 @@ class MavCom:
             print(">>> CONNECTION LOST for 20 SEC, CLOSING...")
             self.close()
 
-        elif (time.time() - self.last_heartbeat > 10):
-            print(">>> CONNECTION LOST for 10 SEC...")
+        elif (time.time() - self.last_heartbeat > 15):
+            print(">>> CONNECTION LOST for 15 SEC...")
             
 
     def recv_message(self):
@@ -156,7 +156,7 @@ class MavCom:
 
             if len(recvd) > 6:
                 if recvd[0:6] == "BOXINF":
-                    self.boxes.append(tuple(map(int, recvd[7:-1].split(','))))
+                    self.boxes.append(list(map(int, recvd[7:-1].split(','))) + [time.time()])
 
                 elif len(recvd) > 7:
                     if recvd[0:7] == "STATINF":
@@ -164,7 +164,7 @@ class MavCom:
                         if (len(spltted) > 4):
                             self.is_armed = (spltted[0] == '1')
                             self.control_mode = self.cont_map.get(int(spltted[1]))
-                            self.control_mode = self.control_mode if self.control_mode else "UNWN"
+                            self.control_mode = self.control_mode if self.control_mode else "UNK"
 
                             self.left_stat = (spltted[2] == '1')
                             self.right_stat = (spltted[3] == '1')
@@ -193,11 +193,10 @@ class MavCom:
         if (self.boxes):
             box = self.boxes[-1]
             self.boxes.pop()
-            cls, x1, y1, x2, y2 = box
-            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255 if cls else 0, 0 if cls else 255), 2)
-        
+            cls, x1, y1, x2, y2, tm = box
 
-
+            if (time.time()-tm < 0.2):
+                cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255 if cls else 0, 0 if cls else 255), 2)
 
 
         ## TESTING ##

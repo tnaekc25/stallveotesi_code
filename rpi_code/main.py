@@ -46,6 +46,7 @@ lost_start = -1
 #############################
 
 firing_lock = Lock()
+frame_lock = Lock()
 
 comm_event1 = Event()
 comm_event12 = Event()
@@ -67,9 +68,6 @@ should_head = [False, False]
 
 head_time = [-1, -1]
 
-projected_hit = None
-
-
 #############################
 
 
@@ -89,24 +87,27 @@ def distn(lat1, lon1, lat2, lon2):
 
 
 def direct_fire():
-    global box_data, telemetry_data, detection_count, last_detect, is_shot, projected_hit, frame_queue
+    global box_data, telemetry_data, detection_count, last_detect, is_shot, frame_queue, frame_lock
 
     while (not stop_event.is_set()):
         try:
             img_feed = None
-            try:
-                if not frame_queue.empty():
-                    img_feed = frame_queue.get_nowait()
-            except:
-                pass
+
+            if not frame_queue.empty():
+                with frame_lock:
+                    img_feed = frame_queue.get().copy()
 
             if (is_det and img_feed is not None and (False in is_shot)):
                 box_data = img_det.get_boxes(img_feed, DET_CONF)
 
+                if (IMG_TEST == 2):
+                    if (video):
+                        video.out.write(video.draw(img_feed, box_data))
+
                 for box in box_data:
                     clss = 1 if box[0] else 0
 
-                    if (is_shot[clss]):
+                    if (is_shot[clss] or not (clss or is_shot[1])):
                         continue
                 
                     if last_detect[clss] >= 0 and (time.time() - last_detect[clss]) > DETECTION_TIMEOUT:
@@ -118,11 +119,9 @@ def direct_fire():
 
                     # CHECK TO FIRE
                     if detection_count[clss] >= REQUIRED_DETECTION_COUNT:
-                        p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
+                        p.ChangeDutyCycle(MIN_PWM if clss else MAX_PWM)
                         time.sleep(PWMRET_WAIT)
                         p.ChangeDutyCycle(NET_PWM)
-                        time.sleep(PWM_WAIT)
-                        p.ChangeDutyCycle(0)
 
                         p.ChangeDutyCycle(0)
                         for x in range(3):
@@ -137,90 +136,25 @@ def direct_fire():
 
 
 
-
-def manual_fire():
-    global box_data, telemetry_data, detection_count, last_detect, is_shot, projected_hit
-
-    while (not stop_event.is_set()):
-        try:
-
-            try:
-                if not frame_queue.empty():
-                    img_feed = frame_queue.get_nowait()
-            except:
-                img_feed = None
-
-            if (is_det and (img_feed) is not None and (False in is_shot)):
-                box_data = img_det.get_boxes(img_feed, DET_CONF)
-
-                for box in box_data:
-                    clss = 1 if box[0] else 0
-
-                    if (is_shot[clss]):
-                        continue
-                
-                    if last_detect[clss] >= 0 and (time.time() - last_detect[clss]) > DETECTION_TIMEOUT:
-                        detection_count[clss] = 0
-                
-                    if detection_count[clss] < REQUIRED_DETECTION_COUNT:
-                        detection_count[clss] += 1
-                        last_detect[clss] = time.time()
-
-                    # CHECK TO FIRE
-                    if detection_count[clss] >= REQUIRED_DETECTION_COUNT:
-                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
-                        attd = telemetry_data.get("ATTITUDE")
-                        hud = telemetry_data.get("VFR_HUD")
-                        
-                        if (gps and attd and hud):
-
-                            cralt = gps.relative_alt / 1000
-
-                            try:
-                                detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, cralt)
-                            except ValueError:
-                                continue
-                                
-                            c = sim.simulate(np.array((0, 0, cralt, 0, hud.airspeed, hud.climb)), MDELAY)
-                            hx, hy = c[0:2]
-
-                            projected_hit = (hx, hy, detx, dety, clss)
-    
-                            if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
-                                with firing_lock:
-                                    p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
-                                    time.sleep(PWMRET_WAIT)
-                                    p.ChangeDutyCycle(NET_PWM)
-                                    time.sleep(PWM_WAIT)
-                                    p.ChangeDutyCycle(0)
-                                    for x in range(3):
-                                        loggr.print(">>> AUTO SHOOT")
-                                    is_shot[clss] = 1
-
-            time.sleep(DET_WAIT)
-        
-        except Exception as e:
-            loggr.print("ERROR AT THREAD 0 " + str(e), 2)
-            time.sleep(ERROR_WAIT)
-
-
-
 ## APPLY OBJECT DETECTION AND RUN SIMULATION AND FIRE
 def detect_and_fire():
 
-    global box_data, telemetry_data, detection_count, last_detect, projected_hit
-    global pos_diff, headed, head_time, is_shot, shoot_pos, should_head
+    global box_data, telemetry_data, detection_count, last_detect, projected_hit, frame_lock
+    global pos_diff, headed, head_time, is_shot, shoot_pos, should_head, frame_queue, firing_lock
 
     if (PC_TEST):
-        shoot_pos[0] = (39.8831412, 32.7792335, 39.8837422, 32.7785039, 207, time.time())
+        shoot_pos[0] = (39.8831412, 32.7792335, 39.8837422, 32.7785039, time.time())
 
     while (not stop_event.is_set()):
         try:
             # CHECK TO GUIDE TO TARGET
-            for clss in range(2):
+            for clss in range(1, -1, -1):
                 if (shoot_pos[clss] and not headed[clss]):
-                    if (time.time()-shoot_pos[clss][5] > SHOOT_COOLDOWN):
+
+                    if (not clss and (not is_shot[1] and not should_head[1])):
+                        continue
+
+                    if (time.time()-shoot_pos[clss][4] > SHOOT_COOLDOWN):
                         gps = telemetry_data.get("GLOBAL_POSITION_INT")
             
                         if (gps):
@@ -233,7 +167,7 @@ def detect_and_fire():
                             pos_diff[clss] = (abs(lat - shoot_pos[clss][2]), abs(lon - shoot_pos[clss][3]),
                              distn(lat, lon, shoot_pos[clss][2], shoot_pos[clss][3]))
                 
-                            if (pos_diff[clss][2] < MAX_SHOOT_DIST):
+                            if (pos_diff[clss][2] < AUTO_HEAD_DIST):
                                 should_head[clss] = True
 
                 # GUIDE TO TARGET
@@ -245,39 +179,62 @@ def detect_and_fire():
                         comm_event12.wait()
                         comm_event22.wait()
 
-                        while True:
-                            if (mav_com.go_waypoint(tolat, tolon, HIT_ALTITUDE,
-                                HIT_AIRSPEED, shoot_pos[clss][4], lat, lon, loggr)):
-                                break
-                            else:
+                        for x in range(20):
+                            if (not mav_com.go_waypoint(tolat, tolon, lat, lon, HIT_ALTITUDE,
+                                HIT_AIRSPEED, loggr)):
                                 loggr.print("FAIL AT REPOSITION", 2)
+                                continue
 
                             headed[clss] = True
                             should_head[clss] = False
                             head_time[clss] = time.time()
+                            break
 
                         comm_event1.set()
                         comm_event2.set()
 
-                # RETURN IF TIMEOUTS and RESTART DETECTION
-                elif (headed[clss] and time.time()-head_time[clss] > SEARCH_TIMEOUT):
-                    while (not mav_com.return_auto()):
-                        pass
-                    loggr.print("TARGET RESET - MODE IS AUTO", 1)
-                    headed[clss] = False
-                    shoot_pos[clss] = None
-                    detection_count[clss] = 0
-                    last_detect[clss] = -1
+                # IF HEADED, SHOOT and RETURN
+                elif (headed[clss]):
+                    gps = telemetry_data.get("GLOBAL_POSITION_INT")
+            
+                    if (gps):
+                        lat = gps.lat / 1e7
+                        lon = gps.lon / 1e7
+        
+                        tolat = shoot_pos[clss][0]
+                        tolon = shoot_pos[clss][1]
+        
+                        pos_diff[clss] = (abs(lat - shoot_pos[clss][2]), abs(lon - shoot_pos[clss][3]),
+                         distn(lat, lon, shoot_pos[clss][2], shoot_pos[clss][3]))
+            
+                        if (pos_diff[clss][2] < AUTO_SHOOT_DIST):
+                            loggr.print("TARGET REACHED - SHOOT", 1)
+        
+                            with firing_lock:
+                                headed[clss] = False
+                                shoot_pos[clss] = None
+    
+                                p.ChangeDutyCycle(MIN_PWM if clss else MAX_PWM)
+                                time.sleep(PWM_WAIT)
+                                p.ChangeDutyCycle(0)
+    
+                                is_shot[clss] = 1
+        
+                            for x in range(20):  
+                                if (mav_com.return_auto()):
+                                    break
 
+            if (True in headed):
+                time.sleep(HEAD_WAIT)
+                continue
 
-            try:
-                if not frame_queue.empty():
-                    img_feed = frame_queue.get_nowait()
-            except:
-                img_feed = None
+            img_feed = None
+            if not frame_queue.empty():
+                with frame_lock:
+                    img_feed = frame_queue.get().copy()
 
             if (is_det and (img_feed) is not None and (False in is_shot)):
-                box_data = img_det.get_boxes(img_feed, DET_CONF, STRETCH_FIX)
+                box_data = img_det.get_boxes(img_feed, DET_CONF)
 
                 for box in box_data:
                     clss = 1 if box[0] else 0
@@ -311,53 +268,8 @@ def detect_and_fire():
                             except ValueError as e:
                                 continue
 
-                            try:
-                                sx, sy = sim.revsim(detx, dety, 
-                                    HIT_ALTITUDE, HIT_AIRSPEED, MDELAY)
-                            except RuntimeError as e:
-                                continue
-
-                            projected_hit = (sx, sy, detx, dety, clss)
-
-                            lat, lon = img_det.pos_to_gps(gps, hud, sx, sy)
-                            shoot_pos[clss] = (lat, lon, gps.lat / 1e7, gps.lon / 1e7, hud.heading, time.time())
-
-
-                    # CHECK TO FIRE
-                    elif (headed[clss]):
-                        hud = telemetry_data.get("VFR_HUD")
-                        gps = telemetry_data.get("GLOBAL_POSITION_INT")
-                        attd = telemetry_data.get("ATTITUDE")
-                    
-                        if (hud and attd and gps):
-                    
-                            cralt = gps.relative_alt / 1000
-
-                            try:
-                                detx, dety = img_det.get_distance((box[1] + box[3]) / 2,
-                                    (box[2] + box[4]) / 2, attd.roll, attd.pitch, cralt)
-                            except ValueError:
-                                continue
-                                
-                            c = sim.simulate(np.array((0, 0, cralt, 0, hud.airspeed, hud.climb)), MDELAY)
-                            hx, hy = c[0:2]
-
-                            projected_hit = (hx, hy, detx, dety, clss)
-    
-                            if (abs(hx - detx) < MAX_DIST and abs(hy - dety) < MAX_DIST):
-                                with firing_lock:
-                                    p.ChangeDutyCycle(MAX_PWM if clss else MIN_PWM)
-                                    time.sleep(PWMRET_WAIT)
-                                    p.ChangeDutyCycle(NET_PWM)
-                                    time.sleep(PWM_WAIT)
-                                    p.ChangeDutyCycle(0)
-                                    is_shot[clss] = 1
-
-                                headed[clss] = False
-                                while (not mav_com.return_auto()):
-                                    pass
-                                shoot_pos[clss] = None
-
+                            lat, lon = img_det.pos_to_gps(gps, hud, detx, dety)
+                            shoot_pos[clss] = (lat, lon, gps.lat / 1e7, gps.lon / 1e7, time.time())
 
             time.sleep(DET_WAIT)
         
@@ -378,20 +290,15 @@ def read_send_img():
                 img_feed = img_recv.recv()
                 
                 if (img_feed is not None):
-
                     try:
                         frame_queue.put_nowait(img_feed)
                     except:
-                        try:
-                            if not frame_queue.full():
-                                frame_queue.put_nowait(img_feed.copy())
-                            else: 
+                        if not frame_queue.empty():
+                            with frame_lock:
                                 frame_queue.get_nowait()
-                                frame_queue.put_nowait(img_feed.copy())
-                        except:
-                            pass
+                                frame_queue.put_nowait(img_feed)
 
-                    if (IMG_TEST):
+                    if (IMG_TEST == 1):
                         if (video):
                             video.out.write(img_feed)
                     img_send.send(img_feed)
@@ -462,7 +369,7 @@ def read_data():
                             mav_com.send_gcs(msg)
                         else:
                             telemetry_data[msg.get_type()] = msg
-    
+                    else:
                         telemetry_data[msg.get_type()] = msg               
                     
                     mav_com.send_planner(msg.get_msgbuf())
@@ -617,11 +524,11 @@ def log():
 
             loggr.raw_print(" | ", 0, "")
 
-            if (projected_hit):
+            """if (projected_hit):
                 loggr.raw_print(f"{projected_hit[4]} - hit: {projected_hit[0]} {projected_hit[1]}" +
                     f", target: {projected_hit[2]} {projected_hit[3]}", 1, "")
             else:
-                loggr.raw_print("NO HIT PROJECTION", 2, "")
+                loggr.raw_print("NO HIT PROJECTION", 2, "")"""
 
             loggr.raw_print(" |", 0)
 
@@ -819,6 +726,11 @@ def mainloop():
                     comm_event1.set()
                     comm_event2.set()
 
+                elif (blst[0].value == 13):
+                    last_rc = -1
+                    failsafed = False
+                    signal_lost = False
+
                 blst.pop(0)
 
             time.sleep(MAIN_WAIT)
@@ -1011,13 +923,10 @@ try:
             telem_logger = TelemLog("telem_log.txt")
             telemlog_thread = Thread(target=write_telem, daemon=False)
             telemlog_thread.start()
-        elif IS_MANUAL:
-            if SIMPLE_FIRE:
-                detect_thread = Thread(target=direct_fire, daemon=False)
-                detect_thread.start()
-            else:
-                detect_thread = Thread(target=manual_fire, daemon=False)
-                detect_thread.start()
+        
+        if SIMPLE_FIRE:
+            detect_thread = Thread(target=direct_fire, daemon=False)
+            detect_thread.start()
         else:
             detect_thread = Thread(target=detect_and_fire, daemon=False)
             detect_thread.start()
@@ -1037,7 +946,7 @@ try:
         video = None
         if (IMG_TEST):
             loggr.print("Starting with Local Image Save...", 3)
-            video = VideoSave(IMG_FPS, IMG_WIDTH, IMG_HEIGHT)           
+            video = VideoSave(IMG_FPS if IMG_TEST == 1 else IMG_FPS / 4 if IMG_TEST == 2 else 0, IMG_WIDTH, IMG_HEIGHT)           
         read_send_img()
 
 except KeyboardInterrupt:

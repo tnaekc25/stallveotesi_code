@@ -38,8 +38,8 @@ class DetectClass:
 
 
 	def get_boxes(self, img, conf):
-		raw_box_data = self.model.predict(self.preprocess(img), conf=conf, show = False)[0].boxes
-		return [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data] 
+		raw_box_data = self.model(self.preprocess(img), imgsz=416, conf=conf, verbose=False, workers=8)[0].boxes
+		return [[int(box.cls[0].item())] + list(map(int, box.xyxy[0])) for box in raw_box_data]
 
 	def get_distance(self, x, y, roll, pitch, h):
 		
@@ -102,7 +102,8 @@ class RecvClass:
 
 	def recv(self):
 		ret, frame = self.cap.read()
-		return cv2.flip(frame, 0) if ret else None
+		#return cv2.flip(frame, 0) if ret else None
+		return frame if ret else None
 
 	def close(self):
 		if (self.cap):
@@ -161,6 +162,12 @@ class VideoSave:
 	def __init__(self, fps, width, height):
 		fourcc = cv2.VideoWriter_fourcc(*"XVID")
 		self.out = cv2.VideoWriter("output.avi", fourcc, fps, (width, height))
+
+	def draw(self, img, boxes):
+		for (cls, x1, y1, x2, y2) in boxes:
+			cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255 if cls else 0, 0 if cls else 255), 2)
+
+		return img
 
 		
 
